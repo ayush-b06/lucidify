@@ -34,6 +34,8 @@ const DASHBOARDClientMessages = () => {
     const [selectedChat, setSelectedChat] = useState<string>('Lucidify'); // Initially set to 'Lucidify'
     const [newMessage, setNewMessage] = useState<string>('');
     const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null); // 🔑 new state
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
 
     const authInstance = getAuth();
 
@@ -149,6 +151,7 @@ const DASHBOARDClientMessages = () => {
     const handleChatSelect = async (conversationId: string) => {
         setSelectedChat(conversationId); // Set the conversation to the selected one
         fetchMessages(conversationId); // Fetch messages for the selected conversation
+        setMobileView('chat');
 
         const user = authInstance.currentUser;
         if (!user) return;
@@ -269,6 +272,10 @@ const DASHBOARDClientMessages = () => {
 
     const selectedConversation = conversations.find(convo => convo.id === selectedChat);
 
+    const filteredConversations = conversations.filter(convo =>
+        convo.title?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
@@ -279,154 +286,101 @@ const DASHBOARDClientMessages = () => {
     }, [groupedMessages]);
 
     return (
-        <div className="flex h-screen DashboardBackgroundGradient">
+        <div className="flex h-screen DashboardBackgroundGradient overflow-hidden">
             {/* Left Sidebar */}
             <DashboardClientSideNav highlight="messages" />
 
             {/* Right Side (Main Content) */}
-            <div className="flex-1 flex flex-col"> {/* Takes up remaining space */}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                 <div className="absolute BottomGradientBorder left-0 top-[103px] w-full" />
-                <div className="flex min-w-min items-center justify-between px-[50px] py-6">
+                <div className="flex min-w-min items-center justify-between px-[20px] sm:px-[50px] py-6 flex-shrink-0">
                     <div className="inline-flex items-center gap-[5px]">
                         <div className="inline-flex items-center gap-[5px] opacity-40">
                             <div className="w-[15px]">
-                                <Image
-                                    src="/Home Icon.png"
-                                    alt="Home Icon"
-                                    layout="responsive"
-                                    width={0}
-                                    height={0}
-                                />
+                                <Image src="/Home Icon.png" alt="Home Icon" layout="responsive" width={0} height={0} />
                             </div>
-                            <div className="font-light text-sm">
-                                Home
-                            </div>
+                            <div className="font-light text-sm">Home</div>
                         </div>
                         <div className="inline-flex items-center gap-[5px]">
-                            <div className=" font-light text-sm">
-                                / Messages
-                            </div>
+                            <div className="font-light text-sm">/ Messages</div>
                         </div>
                     </div>
                     <div className="inline-flex items-center gap-5">
                         <div className="flex w-[55px] h-[55px] items-center justify-center gap-2.5 relative rounded-[100px] BlackGradient ContentCardShadow hover:cursor-pointer">
                             <div className="flex flex-col w-5 h-5 items-center justify-center gap-2.5 px-[3px] py-0 absolute -top-[5px] -left-[4px] bg-[#6265f0] rounded-md">
-                                <div className=" font-normal text-xs">
-                                    2
-                                </div>
+                                <div className="font-normal text-xs">2</div>
                             </div>
-                            <div className=" w-[25px]">
-                                <Image
-                                    src="/Notification Bell Icon.png"
-                                    alt="Bell Icon"
-                                    layout="responsive"
-                                    width={0}
-                                    height={0}
-                                />
+                            <div className="w-[25px]">
+                                <Image src="/Notification Bell Icon.png" alt="Bell Icon" layout="responsive" width={0} height={0} />
                             </div>
                         </div>
-                        <Link
-                            href="/dashboard/settings"
-                            className="flex w-[129px] h-[55px] items-center justify-center gap-2.5 px-0 py-[15px]  rounded-[15px] BlackGradient ContentCardShadow">
-                            <div className=" font-light text-sm">
-                                Settings
-                            </div>
-                            <div className=" w-[30px]">
-                                <Image
-                                    src="/Settings Icon.png"
-                                    alt="Settings Icon"
-                                    layout="responsive"
-                                    width={0}
-                                    height={0}
-                                />
+                        <Link href="/dashboard/settings" className="flex w-[129px] h-[55px] items-center justify-center gap-2.5 px-0 py-[15px] rounded-[15px] BlackGradient ContentCardShadow">
+                            <div className="font-light text-sm">Settings</div>
+                            <div className="w-[30px]">
+                                <Image src="/Settings Icon.png" alt="Settings Icon" layout="responsive" width={0} height={0} />
                             </div>
                         </Link>
                     </div>
                 </div>
 
                 {/* START OF MESSAGES */}
-                <div className="flex w-full justify-center">
-                    <div className="flex w-full mx-[50px] mt-[30px] p-[1px] ContentCardShadow rounded-[35px]">
+                <div className="flex flex-1 min-h-0 justify-center px-[12px] sm:px-[50px] pb-[12px] sm:pb-[30px]">
+                    <div className="flex w-full p-[1px] ContentCardShadow rounded-[35px] min-h-0 overflow-hidden">
 
                         {/* Left: Conversations List */}
-                        <div className="flex flex-col w-[467px] bg-gradient-to-br from-[#1A1A1A] to-[#101010] rounded-l-[35px]">
-                            <div className="flex justify-between mx-[50px] mt-[25px] items-center">
-                                <h1 className="text-[30px] font-semibold mb-[2px]">Messages</h1>
+                        <div className={`flex flex-col w-full sm:w-[320px] lg:w-[467px] bg-gradient-to-br from-[#1A1A1A] to-[#101010] rounded-[35px] sm:rounded-l-[35px] sm:rounded-r-none min-h-0 overflow-hidden flex-shrink-0 ${mobileView === 'chat' ? 'hidden sm:flex' : 'flex'}`}>
+                            <div className="flex justify-between mx-[30px] lg:mx-[50px] mt-[25px] items-center flex-shrink-0">
+                                <h1 className="text-[24px] lg:text-[30px] font-semibold mb-[2px]">Messages</h1>
                                 <div className="hover:cursor-pointer flex items-center gap-[6px] px-[16px] py-[8px] rounded-[10px] PopupAttentionGradient PopupAttentionShadow">
                                     <div className="w-[15px]">
-                                        <Image
-                                            src="/Plus Icon.png"
-                                            alt="Plus Icon"
-                                            layout="responsive"
-                                            width={0}
-                                            height={0}
-                                        />
+                                        <Image src="/Plus Icon.png" alt="Plus Icon" layout="responsive" width={0} height={0} />
                                     </div>
                                     <h3 className="text-[14px] font-light">New</h3>
                                 </div>
                             </div>
-                            <div className="relative my-[50px] mx-[50px]">
+                            <div className="relative my-[20px] lg:my-[30px] mx-[30px] lg:mx-[50px] flex-shrink-0">
                                 <input
                                     type="text"
                                     placeholder="Search"
-                                    className="w-full px-[15px] py-[15px] rounded-lg BlackWithLightGradient ContentCardShadow text-[14px] focus:outline-none"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full px-[15px] py-[12px] lg:py-[15px] rounded-lg BlackWithLightGradient ContentCardShadow text-[14px] focus:outline-none"
                                 />
                             </div>
-                            <div className="flex flex-col gap-[30px]">
+                            <div className="flex flex-col gap-[20px] lg:gap-[30px] flex-1 overflow-y-auto min-h-0">
                                 {/* Pinned Messages */}
                                 <div className="flex flex-col gap-[10px]">
-                                    <h3 className="px-[50px] opacity-70 font-light text-[14px]">Pinned</h3>
+                                    <h3 className="px-[30px] lg:px-[50px] opacity-70 font-light text-[14px]">Pinned</h3>
                                     <div className="flex flex-col">
-                                        {conversations.filter(conversation => conversation.isPinned).length > 0 ? (
-                                            conversations
+                                        {filteredConversations.filter(conversation => conversation.isPinned).length > 0 ? (
+                                            filteredConversations
                                                 .filter(conversation => conversation.isPinned)
                                                 .map(conversation => (
                                                     <div
                                                         key={conversation.id}
-                                                        className={`px-[50px] py-[22px] border-t-[0.5px] border-solid border-white ${selectedChat === conversation.id ? 'MessagesHighlightGradient border-opacity-50' : 'border-opacity-25'} text-white cursor-pointer flex gap-[15px]`}
+                                                        className={`px-[30px] lg:px-[50px] py-[18px] lg:py-[22px] border-t-[0.5px] border-solid border-white ${selectedChat === conversation.id ? 'MessagesHighlightGradient border-opacity-50' : 'border-opacity-25'} text-white cursor-pointer flex gap-[15px]`}
                                                         onClick={() => handleChatSelect(conversation.id)}
                                                     >
-                                                        <div className="rounded-[5px] BlackGradient ContentCardShadow flex justify-center items-center">
+                                                        <div className="rounded-[5px] BlackGradient ContentCardShadow flex justify-center items-center flex-shrink-0">
                                                             <div className="w-[30px] mx-[8px] my-[8px]">
-                                                                <Image
-                                                                    src="/Lucidify Umbrella.png"
-                                                                    alt="Lucidify Logo"
-                                                                    layout="responsive"
-                                                                    width={0}
-                                                                    height={0}
-                                                                />
+                                                                <Image src="/Lucidify Umbrella.png" alt="Lucidify Logo" layout="responsive" width={0} height={0} />
                                                             </div>
                                                         </div>
-
-                                                        {/* Main Content Section */}
-                                                        <div className="flex flex-col h-full flex-grow">
-                                                            {/* First Row: Title and Timestamp */}
+                                                        <div className="flex flex-col h-full flex-grow min-w-0">
                                                             <div className="flex justify-between w-full">
-                                                                <h4 className="text-[16px] flex-grow">{conversation.title || 'Untitled Chat'}</h4>
-                                                                <h4 className="text-[12px] opacity-60">{formatTimestamp(conversation.timestamp)}</h4>
+                                                                <h4 className="text-[16px] flex-grow truncate">{conversation.title || 'Untitled Chat'}</h4>
+                                                                <h4 className="text-[12px] opacity-60 flex-shrink-0 ml-2">{formatTimestamp(conversation.timestamp)}</h4>
                                                             </div>
-
-                                                            {/* Second Row: Last Message and Unread Count */}
                                                             <div className="flex justify-between w-full">
-                                                                <div className="flex-grow">
-                                                                    <p className="text-[14px] opacity-40 whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: '250px' }}>
-                                                                        {conversation.lastMessage}
-                                                                    </p>
-                                                                </div>
-
+                                                                <p className="text-[14px] opacity-40 truncate flex-grow">{conversation.lastMessage}</p>
                                                                 {conversation.unreadCounts?.[auth.currentUser?.uid || ""] > 0 ? (
-                                                                    <div className="flex justify-center items-center w-[20px] h-[20px] bg-[#6265F0] rounded-full">
-                                                                        <h4 className="px-[2px] text-[12px]">
-                                                                            {conversation.unreadCounts[auth.currentUser?.uid || ""]}
-                                                                        </h4>
+                                                                    <div className="flex justify-center items-center w-[20px] h-[20px] bg-[#6265F0] rounded-full flex-shrink-0 ml-2">
+                                                                        <h4 className="px-[2px] text-[12px]">{conversation.unreadCounts[auth.currentUser?.uid || ""]}</h4>
                                                                     </div>
-                                                                ) : (
-                                                                    <div className=""></div>
-                                                                )}
+                                                                ) : null}
                                                             </div>
                                                         </div>
                                                     </div>
-
                                                 ))
                                         ) : (
                                             <div className="w-full flex justify-center items-center">
@@ -438,115 +392,86 @@ const DASHBOARDClientMessages = () => {
 
                                 {/* All Messages */}
                                 <div className="flex flex-col gap-[10px]">
-                                    <h3 className="px-[50px] opacity-70 font-light text-[14px]">All Messages</h3>
+                                    <h3 className="px-[30px] lg:px-[50px] opacity-70 font-light text-[14px]">All Messages</h3>
                                     <div className="flex flex-col">
-                                        {conversations.filter(conversation => !conversation.isPinned).length > 0 ? (
-                                            conversations
+                                        {filteredConversations.filter(conversation => !conversation.isPinned).length > 0 ? (
+                                            filteredConversations
                                                 .filter(conversation => !conversation.isPinned)
                                                 .map(conversation => (
                                                     <div
                                                         key={conversation.id}
-                                                        className={`px-[50px] py-[22px] border-t-[0.5px] border-solid border-white ${selectedChat === conversation.id ? 'MessagesHighlightGradient border-opacity-50' : 'border-opacity-25'} text-white cursor-pointer flex gap-[15px]`}
+                                                        className={`px-[30px] lg:px-[50px] py-[18px] lg:py-[22px] border-t-[0.5px] border-solid border-white ${selectedChat === conversation.id ? 'MessagesHighlightGradient border-opacity-50' : 'border-opacity-25'} text-white cursor-pointer flex gap-[15px]`}
                                                         onClick={() => handleChatSelect(conversation.id)}
                                                     >
-                                                        <div className="rounded-[5px] BlackGradient ContentCardShadow flex justify-center items-center">
+                                                        <div className="rounded-[5px] BlackGradient ContentCardShadow flex justify-center items-center flex-shrink-0">
                                                             <div className="w-[30px] mx-[8px] my-[8px]">
-                                                                <Image
-                                                                    src="/Lucidify Umbrella.png"
-                                                                    alt="Lucidify Logo"
-                                                                    layout="responsive"
-                                                                    width={0}
-                                                                    height={0}
-                                                                />
+                                                                <Image src="/Lucidify Umbrella.png" alt="Lucidify Logo" layout="responsive" width={0} height={0} />
                                                             </div>
                                                         </div>
-
-                                                        {/* Main Content Section */}
-                                                        <div className="flex flex-col h-full flex-grow">
-                                                            {/* First Row: Title and Timestamp */}
+                                                        <div className="flex flex-col h-full flex-grow min-w-0">
                                                             <div className="flex justify-between w-full">
-                                                                <h4 className="text-[16px] flex-grow">{conversation.title || 'Untitled Chat'}</h4>
-                                                                <h4 className="text-[12px] opacity-60">{formatTimestamp(conversation.timestamp)}</h4>
+                                                                <h4 className="text-[16px] flex-grow truncate">{conversation.title || 'Untitled Chat'}</h4>
+                                                                <h4 className="text-[12px] opacity-60 flex-shrink-0 ml-2">{formatTimestamp(conversation.timestamp)}</h4>
                                                             </div>
-
-                                                            {/* Second Row: Last Message and Unread Count */}
                                                             <div className="flex justify-between w-full">
-                                                                <div className="flex-grow">
-                                                                    <p className="text-[14px] opacity-40 whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: '250px' }}>
-                                                                        {conversation.lastMessage}
-                                                                    </p>
-                                                                </div>
-
+                                                                <p className="text-[14px] opacity-40 truncate flex-grow">{conversation.lastMessage}</p>
                                                                 {conversation.unreadCounts?.[auth.currentUser?.uid || ""] > 0 ? (
-                                                                    <div className="flex justify-center items-center w-[20px] h-[20px] bg-[#6265F0] rounded-full">
-                                                                        <h4 className="px-[2px] text-[12px]">
-                                                                            {conversation.unreadCounts[auth.currentUser?.uid || ""]}
-                                                                        </h4>
+                                                                    <div className="flex justify-center items-center w-[20px] h-[20px] bg-[#6265F0] rounded-full flex-shrink-0 ml-2">
+                                                                        <h4 className="px-[2px] text-[12px]">{conversation.unreadCounts[auth.currentUser?.uid || ""]}</h4>
                                                                     </div>
-                                                                ) : (
-                                                                    <div className=""></div>
-                                                                )}
+                                                                ) : null}
                                                             </div>
                                                         </div>
                                                     </div>
-
                                                 ))
                                         ) : (
                                             <div className="w-full flex justify-center items-center">
                                                 <p className="text-sm opacity-60 text-white pt-[30px] pb-[40px]">No messages</p>
-                                            </div>)}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         {/* Right: Chat Messages */}
-                        <div className="flex-1 bg-gradient-to-br from-[#101010] to-[#1A1A1A] rounded-r-[35px] flex flex-col LeftGradientBorder">
-                            {/* Top part - fixed at the top */}
-                            <div className="BlackWithLightGradient rounded-tr-[35px] px-[60px] py-[20px] flex justify-between border-b-[0.5px] border-solid border-white border-opacity-20 flex-shrink-0">
-                                <div className="flex gap-[10px]">
-                                    <div className="rounded-[5px] BlackGradient ContentCardShadow flex justify-center items-center">
+                        <div className={`flex-1 bg-gradient-to-br from-[#101010] to-[#1A1A1A] rounded-[35px] sm:rounded-l-none sm:rounded-r-[35px] flex flex-col LeftGradientBorder min-h-0 overflow-hidden ${mobileView === 'list' ? 'hidden sm:flex' : 'flex'}`}>
+                            {/* Top part */}
+                            <div className="BlackWithLightGradient rounded-t-[35px] sm:rounded-tl-none sm:rounded-tr-[35px] px-[20px] sm:px-[60px] py-[20px] flex justify-between border-b-[0.5px] border-solid border-white border-opacity-20 flex-shrink-0 items-center">
+                                {/* Back button - mobile only */}
+                                <button
+                                    className="sm:hidden mr-[10px] opacity-60 hover:opacity-100 flex-shrink-0"
+                                    onClick={() => setMobileView('list')}
+                                    aria-label="Back to conversations"
+                                >
+                                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                        <path d="M12 4l-6 6 6 6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                </button>
+                                <div className="flex gap-[10px] flex-1 min-w-0">
+                                    <div className="rounded-[5px] BlackGradient ContentCardShadow flex justify-center items-center flex-shrink-0">
                                         <div className="w-[30px] h-[30px] flex items-center mx-[8px] my-[8px]">
-                                            <Image
-                                                src="/Lucidify Umbrella.png"
-                                                alt="Lucidify Logo"
-                                                layout="responsive"
-                                                width={0}
-                                                height={0}
-                                            />
+                                            <Image src="/Lucidify Umbrella.png" alt="Lucidify Logo" layout="responsive" width={0} height={0} />
                                         </div>
                                     </div>
-                                    <div className="h-full flex flex-col justify-between font-semibold text-[16px]">
-                                        <h3>{selectedConversation ? selectedConversation.title || 'Untitled Chat' : 'Loading...'}</h3>
-                                        <h3 className="opacity-60 text-[14px] font-light">{selectedConversation ? selectedConversation.lastSeen || 'Last seen...' : 'Last seen...'}</h3>
+                                    <div className="h-full flex flex-col justify-between font-semibold text-[16px] min-w-0">
+                                        <h3 className="truncate">{selectedConversation ? selectedConversation.title || 'Untitled Chat' : 'Loading...'}</h3>
+                                        <h3 className="opacity-60 text-[14px] font-light truncate">{selectedConversation ? selectedConversation.lastSeen || 'Last seen...' : 'Last seen...'}</h3>
                                     </div>
                                 </div>
-                                <div className="flex gap-[30px] items-center">
-                                    <div className="flex gap-[15px]">
+                                <div className="flex gap-[15px] sm:gap-[30px] items-center flex-shrink-0">
+                                    <div className="hidden sm:flex gap-[15px]">
                                         <div className="rounded-[5px] BlackGradient ContentCardShadow flex justify-center items-center hover:cursor-pointer hover:scale-95">
                                             <div className="w-[20px] h-[20px] flex items-center mx-[8px] my-[8px]">
-                                                <Image
-                                                    src="/Phone Call Icon.png"
-                                                    alt="Phone Call Icon"
-                                                    layout="responsive"
-                                                    width={0}
-                                                    height={0}
-                                                />
+                                                <Image src="/Phone Call Icon.png" alt="Phone Call Icon" layout="responsive" width={0} height={0} />
                                             </div>
                                         </div>
                                         <div className="rounded-[5px] BlackGradient ContentCardShadow flex justify-center items-center hover:cursor-pointer hover:scale-95">
                                             <div className="w-[20px] h-[20px] flex items-center mx-[8px] my-[8px]">
-                                                <Image
-                                                    src="/Video Call Icon.png"
-                                                    alt="Video Call Icon"
-                                                    layout="responsive"
-                                                    width={0}
-                                                    height={0}
-                                                />
+                                                <Image src="/Video Call Icon.png" alt="Video Call Icon" layout="responsive" width={0} height={0} />
                                             </div>
                                         </div>
                                     </div>
-
                                     <div className="flex flex-col gap-[4px] hover:cursor-pointer hover:opacity-50">
                                         <div className="bg-white rounded-full w-[4px] h-[4px]" />
                                         <div className="bg-white rounded-full w-[4px] h-[4px]" />
@@ -555,15 +480,13 @@ const DASHBOARDClientMessages = () => {
                                 </div>
                             </div>
 
-                            {/* Middle part - takes the remaining space */}
-                            <div
-                                ref={messagesEndRef}
-                                className="flex flex-col overflow-y-auto gap-[15px] h-[586px] flex-grow">
+                            {/* Middle part - scrollable */}
+                            <div ref={messagesEndRef} className="flex flex-col overflow-y-auto gap-[15px] flex-1 min-h-0">
                                 {groupedMessages.map((group, index) => (
-                                    <div key={index} className={`flex mx-[60px] my-[30px] ${group[0].sender === authInstance.currentUser?.uid ? "justify-end" : "justify-start"}`}>
-                                        <div className="max-w-[80%]">
+                                    <div key={index} className={`flex mx-[20px] sm:mx-[60px] my-[15px] sm:my-[30px] ${group[0].sender === authInstance.currentUser?.uid ? "justify-end" : "justify-start"}`}>
+                                        <div className="max-w-[85%] sm:max-w-[80%]">
                                             {group[0].sender === authInstance.currentUser?.uid ? (
-                                                <div className="inline-flex gap-[15px]">
+                                                <div className="inline-flex gap-[10px] sm:gap-[15px]">
                                                     <div className="flex flex-col gap-[10px] items-end">
                                                         <div className="flex items-center gap-[10px]">
                                                             <h3 className="opacity-80 font-light text-[14px]">You</h3>
@@ -579,32 +502,19 @@ const DASHBOARDClientMessages = () => {
                                                             ))}
                                                         </div>
                                                     </div>
-                                                    <div className="rounded-[5px] BlackGradient ContentCardShadow inline-flex justify-center items-center self-start">
+                                                    <div className="rounded-[5px] BlackGradient ContentCardShadow inline-flex justify-center items-center self-start flex-shrink-0">
                                                         <div className="w-[35px] h-[35px] mx-[8px] my-[8px] flex items-center rounded-full overflow-clip">
-                                                            <Image
-                                                                src={"/" + selectedAvatar || "/Lucidify Umbrella.png"} // Fallback if no photoURL
-                                                                alt="Your PFP"
-                                                                layout="responsive"
-                                                                width={0}
-                                                                height={0}
-                                                            />
+                                                            <Image src={"/" + selectedAvatar || "/Lucidify Umbrella.png"} alt="Your PFP" layout="responsive" width={0} height={0} />
                                                         </div>
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <div className="inline-flex gap-[15px]">
-                                                    <div className="rounded-[5px] BlackGradient ContentCardShadow inline-flex justify-center items-center self-start">
+                                                <div className="inline-flex gap-[10px] sm:gap-[15px]">
+                                                    <div className="rounded-[5px] BlackGradient ContentCardShadow inline-flex justify-center items-center self-start flex-shrink-0">
                                                         <div className="w-[30px] h-[30px] mx-[8px] my-[8px] flex items-center">
-                                                            <Image
-                                                                src="/Lucidify Umbrella.png"
-                                                                alt="Lucidify Logo"
-                                                                layout="responsive"
-                                                                width={0}
-                                                                height={0}
-                                                            />
+                                                            <Image src="/Lucidify Umbrella.png" alt="Lucidify Logo" layout="responsive" width={0} height={0} />
                                                         </div>
                                                     </div>
-
                                                     <div className="flex flex-col gap-[10px]">
                                                         <div className="flex items-center gap-[10px]">
                                                             <h3 className="font-semibold text-[16px]">{selectedConversation ? selectedConversation.title || 'Untitled Chat' : 'Loading...'}</h3>
@@ -613,7 +523,7 @@ const DASHBOARDClientMessages = () => {
                                                         <div className="flex flex-col gap-[10px]">
                                                             {group.map(message => (
                                                                 <div key={message.id} className="inline flex-col gap-[50px]">
-                                                                    <div className={`inline-flex text-[14px] font-light rounded-b-[15px] rounded-tr-[15px] px-[15px] py-[10px] ${group[0].sender === authInstance.currentUser?.uid ? 'PopupAttentionGradient PopupAttentionShadow' : 'MessagesHighlightGradient ContentCardShadow'} `}>
+                                                                    <div className={`inline-flex text-[14px] font-light rounded-b-[15px] rounded-tr-[15px] px-[15px] py-[10px] ${group[0].sender === authInstance.currentUser?.uid ? 'PopupAttentionGradient PopupAttentionShadow' : 'MessagesHighlightGradient ContentCardShadow'}`}>
                                                                         {message.text}
                                                                     </div>
                                                                 </div>
@@ -627,10 +537,9 @@ const DASHBOARDClientMessages = () => {
                                 ))}
                             </div>
 
-
-                            {/* Bottom part - fixed at the bottom */}
-                            <div className="BlackGradient ContentCardShadow rounded-br-[35px] px-[50px] py-[17px] flex gap-[25px] flex-shrink-0">
-                                <div className="BlackWithLightGradient ContentCardShadow rounded-[10px] flex gap-[25px] px-[25px] py-[13px] w-full">
+                            {/* Bottom part */}
+                            <div className="BlackGradient ContentCardShadow rounded-b-[35px] sm:rounded-bl-none sm:rounded-br-[35px] px-[20px] sm:px-[50px] py-[17px] flex gap-[25px] flex-shrink-0">
+                                <div className="BlackWithLightGradient ContentCardShadow rounded-[10px] flex gap-[25px] px-[15px] sm:px-[25px] py-[13px] w-full">
                                     <input
                                         type="text"
                                         value={newMessage}
@@ -639,46 +548,23 @@ const DASHBOARDClientMessages = () => {
                                         className="w-full focus:outline-none text-[16px] font-light bg-transparent"
                                     />
                                     <div className="flex gap-[25px] items-center">
-                                        <div className="flex gap-[15px]">
+                                        <div className="hidden sm:flex gap-[15px]">
                                             <div className="w-[20px] opacity-60 hover:opacity-100 hover:cursor-pointer">
-                                                <Image
-                                                    src="/Attachment Icon.png"
-                                                    alt="Send Icon"
-                                                    layout="responsive"
-                                                    width={0}
-                                                    height={0}
-                                                />
+                                                <Image src="/Attachment Icon.png" alt="Send Icon" layout="responsive" width={0} height={0} />
                                             </div>
                                             <div className="w-[20px] opacity-60 hover:opacity-100 hover:cursor-pointer">
-                                                <Image
-                                                    src="/Microphone Icon.png"
-                                                    alt="Send Icon"
-                                                    layout="responsive"
-                                                    width={0}
-                                                    height={0}
-                                                />
+                                                <Image src="/Microphone Icon.png" alt="Send Icon" layout="responsive" width={0} height={0} />
                                             </div>
                                         </div>
-                                        <button
-                                            onClick={sendMessage}
-                                            className=""
-                                        >
+                                        <button onClick={sendMessage}>
                                             <div className="w-[25px]">
-                                                <Image
-                                                    src="/Send Icon.png"
-                                                    alt="Send Icon"
-                                                    layout="responsive"
-                                                    width={0}
-                                                    height={0}
-                                                />
+                                                <Image src="/Send Icon.png" alt="Send Icon" layout="responsive" width={0} height={0} />
                                             </div>
                                         </button>
                                     </div>
                                 </div>
                             </div>
                         </div>
-
-
                     </div>
                 </div>
             </div>

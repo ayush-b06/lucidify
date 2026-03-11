@@ -7,15 +7,30 @@ import NavStartAProjectButton from './NavStartAProjectButton';
 import Popup from './Popup'; // Import the Popup component
 import SignUpButton from './SignUpButton';
 
+const navLinks = [
+    { href: '/', label: 'Home' },
+    { href: '/creations', label: 'Our Creations' },
+    { href: '/contact', label: "Let's Connect" },
+];
+
 const Navbar = () => {
     const [isPopupOpen, setIsPopupOpen] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     const togglePopup = () => {
         setIsPopupOpen(!isPopupOpen);
     };
 
+    const toggleMobileMenu = () => {
+        setIsMobileMenuOpen(!isMobileMenuOpen);
+    };
+
+    const closeMobileMenu = () => {
+        setIsMobileMenuOpen(false);
+    };
+
     return (
-        <header>
+        <header className="relative z-50">
             <Popup closePopup={togglePopup} isVisible={isPopupOpen} />
 
             {/* Desktop Navigation */}
@@ -36,10 +51,6 @@ const Navbar = () => {
                     <div className="absolute left-1/2 transform -translate-x-1/2 flex">
                         <Link href="/" className="mx-6 font-medium flex flex-col items-center NavItemHover">
                             Home
-                            <div className="h-[1px] w-[50%] bg-white rounded-full NavItemUnderline"></div>
-                        </Link>
-                        <Link href="/services" className="mx-6 font-medium flex flex-col items-center NavItemHover">
-                            Services
                             <div className="h-[1px] w-[50%] bg-white rounded-full NavItemUnderline"></div>
                         </Link>
                         <Link href="/creations" className="mx-6 font-medium flex flex-col items-center NavItemHover">
@@ -63,9 +74,10 @@ const Navbar = () => {
             </nav>
 
             {/* Mobile Navigation */}
-            <nav className="lg:hidden flex justify-center items-center">
-                <div className="xl:w-[80%] md:w-[85%] w-[90%] mt-[30px] 2xl:w-[75%] flex justify-between items-center text-[14px] border-solid border border-1 border-[#414141] rounded-full py-[8px] px-[16px]">
-                    <Link href="/" className="relative sm:w-[125px] w-[110px]">
+            <nav className="lg:hidden flex flex-col items-center">
+                {/* Mobile Top Bar */}
+                <div className="w-[90%] sm:w-[85%] mt-[30px] flex justify-between items-center text-[14px] border-solid border border-1 border-[#414141] rounded-full py-[8px] px-[16px]">
+                    <Link href="/" className="relative sm:w-[125px] w-[110px]" onClick={closeMobileMenu}>
                         <Image
                             src="/Lucidify white logo.png"
                             alt="Lucidify Logo"
@@ -75,17 +87,63 @@ const Navbar = () => {
                         />
                     </Link>
                     <div className="flex items-center">
-                        <NavStartAProjectButton onClick={togglePopup} />
-                        <div className="w-[30px] h-[30px] rounded-full bg-white shadow cursor-pointer ml-[10px] flex flex-col justify-center items-center active:scale-[0.90] active:opacity-75 duration-100 ease-in-out">
-                            <div className="w-[14px] h-[2px] bg-black rounded-full" />
-                            <div className="w-[14px] h-[2px] bg-black rounded-full my-[2px]" />
-                            <div className="w-[14px] h-[2px] bg-black rounded-full" />
+                        <NavStartAProjectButton onClick={() => { closeMobileMenu(); togglePopup(); }} />
+                        {/* Hamburger / Close Button */}
+                        <button
+                            onClick={toggleMobileMenu}
+                            aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+                            className="w-[30px] h-[30px] rounded-full bg-white shadow cursor-pointer ml-[10px] flex flex-col justify-center items-center active:scale-[0.90] active:opacity-75 duration-100 ease-in-out"
+                        >
+                            {isMobileMenuOpen ? (
+                                /* X icon */
+                                <div className="relative w-[14px] h-[14px]">
+                                    <div className="absolute top-1/2 left-0 w-full h-[2px] bg-black rounded-full rotate-45 -translate-y-1/2" />
+                                    <div className="absolute top-1/2 left-0 w-full h-[2px] bg-black rounded-full -rotate-45 -translate-y-1/2" />
+                                </div>
+                            ) : (
+                                /* Hamburger icon */
+                                <>
+                                    <div className="w-[14px] h-[2px] bg-black rounded-full" />
+                                    <div className="w-[14px] h-[2px] bg-black rounded-full my-[2px]" />
+                                    <div className="w-[14px] h-[2px] bg-black rounded-full" />
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Mobile Dropdown Menu */}
+                <div
+                    className={`w-[90%] sm:w-[85%] overflow-hidden transition-all duration-300 ease-in-out ${
+                        isMobileMenuOpen ? 'max-h-[400px] opacity-100 mt-[10px]' : 'max-h-0 opacity-0'
+                    }`}
+                >
+                    <div className="border border-[#414141] rounded-[24px] px-[20px] py-[24px] flex flex-col gap-[6px]">
+                        {navLinks.map((link) => (
+                            <Link
+                                key={link.href}
+                                href={link.href}
+                                onClick={closeMobileMenu}
+                                className="text-white font-medium text-[15px] py-[12px] px-[16px] rounded-[14px] hover:bg-white/10 active:bg-white/20 transition-colors duration-150 flex items-center justify-between"
+                            >
+                                {link.label}
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="opacity-40">
+                                    <path d="M6 3l5 5-5 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            </Link>
+                        ))}
+
+                        {/* Divider */}
+                        <div className="h-[1px] bg-[#414141] my-[8px]" />
+
+                        {/* Auth Buttons */}
+                        <div className="flex flex-col gap-[10px]">
+                            <SignUpButton />
                         </div>
                     </div>
                 </div>
             </nav>
         </header>
-
     );
 };
 

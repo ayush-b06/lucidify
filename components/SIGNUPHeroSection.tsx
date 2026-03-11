@@ -180,9 +180,9 @@ const SIGNUPHeroSection = () => {
 
 
   return (
-    <div className="relative flex justify-center items-center min-h-screen BackgroundGradient overflow-clip">
+    <div className="relative flex justify-center items-center min-h-screen BackgroundGradient overflow-clip px-4">
       {/* Left Decorative Image */}
-      <div className="w-[18%] absolute left-[10%] top-[27%] my-auto z-10">
+      <div className="hidden lg:block w-[18%] absolute left-[10%] top-[27%] my-auto z-10">
         <Image
           src="/3D Astronaut.png"
           alt="Left Decorative Image"
@@ -193,7 +193,7 @@ const SIGNUPHeroSection = () => {
       </div>
 
       {/* Right Decorative Image */}
-      <div className="-right-[17%] bottom-[57%] w-[50%] absolute">
+      <div className="hidden lg:block -right-[17%] bottom-[57%] w-[50%] absolute">
         <Image
           src="/3D Earth.png"
           alt="Right Decorative Image"
@@ -204,9 +204,9 @@ const SIGNUPHeroSection = () => {
       </div>
 
       {/* Signup Form */}
-      <div className={`relative min-w-[500px] z-10 bg-gradient-to-br from-[#d6ceff] via-white/100 to-white rounded-[30px] text-center RegBoxShadow`}>
+      <div className={`relative w-full max-w-[500px] z-10 bg-gradient-to-br from-[#d6ceff] via-white/100 to-white rounded-[30px] text-center RegBoxShadow`}>
         {/* Rocket Icon */}
-        <div className="w-[113px] absolute -top-[120px] -left-[10%] transform -translate-x-1/2">
+        <div className="hidden sm:block w-[113px] absolute -top-[120px] -left-[10%] transform -translate-x-1/2">
           <Image
             src="/3D Invis Rocket.png"
             alt="Rocket Decorative Image"
@@ -220,7 +220,7 @@ const SIGNUPHeroSection = () => {
           className="transition-transform duration-500 ease-in-out overflow-x-hidden px-[1px]"
         >
           {step === 1 && (
-            <div id="SignUpSection1" className=" px-8 py-10 ">
+            <div id="SignUpSection1" className="px-6 sm:px-8 py-10">
 
               {/* Step 1: Google Signup or Email Input */}
               <div className="flex flex-col items-center mb-[40px]">
@@ -281,7 +281,7 @@ const SIGNUPHeroSection = () => {
 
 
           {step === 2 && (
-            <div className="translate-x-[300px] opacity-0 px-8 py-10" id="SignUpSection2">
+            <div className="translate-x-[300px] opacity-0 px-6 sm:px-8 py-10" id="SignUpSection2">
               {/* Step 2: Password Input */}
               <div className="flex flex-col items-center mb-[40px]">
                 <h1 className="text-[26px] font-semibold text-black mb-[6px]">Almost There!</h1>

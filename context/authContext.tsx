@@ -1,17 +1,8 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { 
-  getAuth, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  onAuthStateChanged, 
-  setPersistence, 
-  browserLocalPersistence, 
-  User 
-} from "firebase/auth";
-import { useRouter } from "next/navigation";
-import { app } from "../firebaseConfig"; // Adjust the path if necessary
+import { getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, User } from "firebase/auth";
+import { app } from "../firebaseConfig";
 
 // Define the shape of the AuthContext
 interface AuthContextType {
@@ -25,7 +16,6 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
   const auth = getAuth(app);
 
   useEffect(() => {
@@ -55,7 +45,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider value={{ user, loading }}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

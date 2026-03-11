@@ -19,21 +19,12 @@ const LOGINHeroSection = () => {
     const [password, setPassword] = useState<string>("");
     const [error, setError] = useState<string | null>(null);
 
-    // Check authentication status and redirect if user is already logged in
+    // Redirect to dashboard if already logged in
     useEffect(() => {
         const auth = getAuth();
         const unsubscribe = onAuthStateChanged(auth, (user) => {
-            const loginTimestamp = localStorage.getItem("loginTimestamp");
-
-            // If user is logged in and timestamp is within 30 minutes, redirect to dashboard
-            if (user && loginTimestamp) {
-                const timeElapsed = Date.now() - parseInt(loginTimestamp, 10);
-                if (timeElapsed < 30 * 60 * 1000) {
-                    router.push("/dashboard");
-                } else {
-                    // Clear the timestamp if it's expired
-                    localStorage.removeItem("loginTimestamp");
-                }
+            if (user) {
+                router.push("/dashboard");
             }
         });
 
@@ -46,8 +37,6 @@ const LOGINHeroSection = () => {
             const provider = new GoogleAuthProvider();
             const result = await signInWithPopup(auth, provider);
             if (result.user) {
-                // Save the current timestamp to localStorage
-                localStorage.setItem("loginTimestamp", Date.now().toString());
                 router.push("/dashboard");
             } else {
                 console.log("User sign-in failed or was cancelled.");
@@ -63,8 +52,6 @@ const LOGINHeroSection = () => {
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             if (userCredential.user) {
-                // Save the current timestamp to localStorage
-                localStorage.setItem("loginTimestamp", Date.now().toString());
                 router.push("/dashboard");
             }
         } catch (error) {
@@ -74,9 +61,9 @@ const LOGINHeroSection = () => {
     };
 
     return (
-        <div className="relative flex justify-center items-center min-h-screen BackgroundGradient">
+        <div className="relative flex justify-center items-center min-h-screen BackgroundGradient px-4">
             {/* Left Decorative Image */}
-            <div className="w-[25%] absolute left-[170px] my-auto z-0">
+            <div className="hidden lg:block w-[25%] absolute left-[170px] my-auto z-0">
                 <Image
                     src="/3D Big Hero 5.png"
                     alt="Left Decorative Image"
@@ -87,7 +74,7 @@ const LOGINHeroSection = () => {
             </div>
 
             {/* Right Decorative Image */}
-            <div className="w-[41%] absolute right-[0px] bottom-[0px] z-20">
+            <div className="hidden lg:block w-[41%] absolute right-[0px] bottom-[0px] z-20">
                 <Image
                     src="/3D Big Hero 6.png"
                     alt="Right Decorative Image"
@@ -98,7 +85,7 @@ const LOGINHeroSection = () => {
             </div>
 
             {/* Login Form */}
-            <div className="relative min-w-[500px] z-10 bg-gradient-to-br from-[#d6ceff] via-white/100 to-white rounded-[30px] px-8 py-10 text-center RegBoxShadow">
+            <div className="relative w-full max-w-[500px] z-10 bg-gradient-to-br from-[#d6ceff] via-white/100 to-white rounded-[30px] px-6 sm:px-8 py-10 text-center RegBoxShadow">
                 {/* Go Home Link */}
                 <Link
                     href="/"
@@ -116,7 +103,7 @@ const LOGINHeroSection = () => {
                 </Link>
 
                 {/* Rocket Icon */}
-                <div className="w-[113px] absolute -top-[130px] -left-[10%] transform -translate-x-1/2">
+                <div className="hidden sm:block w-[113px] absolute -top-[130px] -left-[10%] transform -translate-x-1/2">
                     <Image
                         src="/3D Rocket.png"
                         alt="Rocket Decorative Image"

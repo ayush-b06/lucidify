@@ -39,8 +39,16 @@
 
 
 
+body {
+  color: white;
+  background-color: black;
+  font-family: 'Poppins', sans-serif;
+}
+
 body * {
-  transition: 300ms ease-in-out;
+  transition-duration: 300ms;
+  transition-timing-function: ease-in-out;
+  transition-property: opacity, transform, border-color, box-shadow, outline-color;
 }
 
 .BackgroundGradient {
