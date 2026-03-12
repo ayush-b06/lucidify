@@ -259,7 +259,7 @@ const DashboardClientSideNav: React.FC<DashboardClientSideNavProps> = ({ highlig
                                     />
                                 </div>
                                 <div className="flex flex-col gap-[2px]">
-                                    <div className="text-[14px]">{firstName} {lastName || "User Name"}</div>
+                                    <div className="text-[14px]">{`${firstName} ${lastName}` || "User Name"}</div>
                                     <div className="text-[#ffffff66] text-[12px]">{companyName || "Lucidify Member"}</div>
                                 </div>
                             </div>
