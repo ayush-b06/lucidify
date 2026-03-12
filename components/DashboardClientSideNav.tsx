@@ -1,7 +1,7 @@
 "use client";
 
 import { auth, db } from '@/firebaseConfig';
-import { collection, doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
 import Image from 'next/image';
 import Link from 'next/link';
 import React, { useEffect, useState } from 'react';
@@ -19,11 +19,13 @@ const DashboardClientSideNav: React.FC<DashboardClientSideNavProps> = ({ highlig
         companyName: string | null;
         firstName: string | null;
         lastName: string | null;
+        setupComplete: boolean;
     }>({
         selectedAvatar: null,
         companyName: null,
         firstName: null,
         lastName: null,
+        setupComplete: false,
     });
 
     useEffect(() => {
@@ -46,29 +48,25 @@ const DashboardClientSideNav: React.FC<DashboardClientSideNavProps> = ({ highlig
     }, []);
 
     useEffect(() => {
-        const fetchUserData = async () => {
-            try {
-                const currentUser = auth.currentUser;
-                if (!currentUser) return;
-                const userRef = doc(db, "users", currentUser.uid);
-                const userDoc = await getDoc(userRef);
-                if (userDoc.exists()) {
-                    const data = userDoc.data();
-                    setUserData({
-                        selectedAvatar: data?.selectedAvatar || null,
-                        companyName: data?.companyName || null,
-                        firstName: data?.firstName || null,
-                        lastName: data?.lastName || null,
-                    });
-                }
-            } catch (error) {
-                console.error("Error fetching user data:", error);
+        const currentUser = auth.currentUser;
+        if (!currentUser) return;
+        const userRef = doc(db, "users", currentUser.uid);
+        const unsub = onSnapshot(userRef, (snap) => {
+            if (snap.exists()) {
+                const data = snap.data();
+                setUserData({
+                    selectedAvatar: data?.selectedAvatar || null,
+                    companyName: data?.companyName || null,
+                    firstName: data?.firstName || null,
+                    lastName: data?.lastName || null,
+                    setupComplete: data?.setUp || false,
+                });
             }
-        };
-        fetchUserData();
+        });
+        return () => unsub();
     }, []);
 
-    const { selectedAvatar, companyName, firstName, lastName } = userData;
+    const { selectedAvatar, companyName, firstName, lastName, setupComplete } = userData;
 
     const navLinks = [
         { href: "/dashboard", label: "Dashboard", icon: "/Dashboard Icon.png", key: "dashboard" },
@@ -113,8 +111,9 @@ const DashboardClientSideNav: React.FC<DashboardClientSideNavProps> = ({ highlig
                         <button onClick={() => setIsOpen(false)} className="opacity-60 hover:opacity-100 text-[22px] leading-none">✕</button>
                     </div>
 
-                    <Link href="/dashboard/get-started" onClick={() => setIsOpen(false)}
-                        className={`${highlight === "getStarted" ? "BlackWithLightGradient ContentCardShadow" : ""} flex items-center rounded-[10px] mb-[30px]`}>
+                    <div
+                        onClick={setupComplete ? undefined : () => { setIsOpen(false); window.location.href = '/dashboard/get-started'; }}
+                        className={`${highlight === "getStarted" ? "BlackWithLightGradient ContentCardShadow" : ""} flex items-center rounded-[10px] mb-[30px] ${setupComplete ? "cursor-default" : "cursor-pointer"}`}>
                         <div className="flex mx-[10px] my-[7px] items-center justify-between w-full">
                             <div className={`${highlight === "getStarted" ? "opacity-100" : "opacity-50"} flex items-center`}>
                                 <div className="relative w-[20px] h-[20px] mr-[4px]">
@@ -122,11 +121,17 @@ const DashboardClientSideNav: React.FC<DashboardClientSideNavProps> = ({ highlig
                                 </div>
                                 <h3 className="text-[15px] font-light">Get Started</h3>
                             </div>
-                            <div className="PopupAttentionGradient PopupAttentionShadow rounded-[7px]">
-                                <h3 className="mx-[8px] my-[4px] text-[11px] tracking-[0.1px]">Incomplete</h3>
-                            </div>
+                            {setupComplete ? (
+                                <div className="rounded-[7px] bg-[#1a3a1a] border border-[#2d6a2d]">
+                                    <h3 className="mx-[8px] my-[4px] text-[11px] tracking-[0.1px] text-[#4ade80]">Complete</h3>
+                                </div>
+                            ) : (
+                                <div className="PopupAttentionGradient PopupAttentionShadow rounded-[7px]">
+                                    <h3 className="mx-[8px] my-[4px] text-[11px] tracking-[0.1px]">Incomplete</h3>
+                                </div>
+                            )}
                         </div>
-                    </Link>
+                    </div>
 
                     <div className="opacity-60 tracking-[1px] font-extralight text-[12px] mb-[10px]">MENU</div>
                     <div className="flex flex-col gap-[6px]">
@@ -182,8 +187,9 @@ const DashboardClientSideNav: React.FC<DashboardClientSideNavProps> = ({ highlig
                         </Link>
 
                         <div className="flex flex-col mt-[165px] w-full">
-                            <Link href="/dashboard/get-started"
-                                className={`${highlight === "getStarted" ? "BlackWithLightGradient ContentCardShadow" : ""} flex items-center rounded-[10px]`}>
+                            <div
+                                onClick={setupComplete ? undefined : () => { window.location.href = '/dashboard/get-started'; }}
+                                className={`${highlight === "getStarted" ? "BlackWithLightGradient ContentCardShadow" : ""} flex items-center rounded-[10px] ${setupComplete ? "cursor-default" : "cursor-pointer"}`}>
                                 <div className="flex mx-[10px] my-[7px] items-center justify-between w-full">
                                     <div className={`${highlight === "getStarted" ? "opacity-100" : "opacity-50"} flex items-center`}>
                                         <div className="relative w-[20px] h-[20px] mr-[4px]">
@@ -191,11 +197,17 @@ const DashboardClientSideNav: React.FC<DashboardClientSideNavProps> = ({ highlig
                                         </div>
                                         <h3 className="text-[15px] font-light">Get Started</h3>
                                     </div>
-                                    <div className="PopupAttentionGradient PopupAttentionShadow rounded-[7px]">
-                                        <h3 className="mx-[8px] my-[4px] text-[11px] tracking-[0.1px]">Incomplete</h3>
-                                    </div>
+                                    {setupComplete ? (
+                                        <div className="rounded-[7px] bg-[#1a3a1a] border border-[#2d6a2d]">
+                                            <h3 className="mx-[8px] my-[4px] text-[11px] tracking-[0.1px] text-[#4ade80]">Complete</h3>
+                                        </div>
+                                    ) : (
+                                        <div className="PopupAttentionGradient PopupAttentionShadow rounded-[7px]">
+                                            <h3 className="mx-[8px] my-[4px] text-[11px] tracking-[0.1px]">Incomplete</h3>
+                                        </div>
+                                    )}
                                 </div>
-                            </Link>
+                            </div>
 
                             <div className="flex items-center rounded-[10px] mt-[45px] mb-[45px] SearchBackground ContentCardShadow">
                                 <div className="flex mx-[20px] my-[9px] items-center">
@@ -238,13 +250,13 @@ const DashboardClientSideNav: React.FC<DashboardClientSideNavProps> = ({ highlig
                             <div className="flex items-center gap-[15px] relative">
                                 <div className="relative w-[35px] rounded-full overflow-hidden">
                                     <Image
-                                        src={"/" + selectedAvatar || auth.currentUser?.photoURL || "/Lucidify Umbrella.png"}
+                                        src={"/" + selectedAvatar || "/Lucidify Umbrella.png"}
                                         alt="User Profile" layout="responsive" width={0} height={0}
                                     />
                                 </div>
                                 <div className="flex flex-col gap-[2px]">
                                     <div className="text-[14px]">{firstName} {lastName || "User Name"}</div>
-                                    <div className="text-[#ffffff66] text-[12px]">{companyName || "Lucidify"}</div>
+                                    <div className="text-[#ffffff66] text-[12px]">{companyName || "Lucidify Member"}</div>
                                 </div>
                             </div>
                             <div className="relative w-[12px]">

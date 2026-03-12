@@ -14,9 +14,11 @@ import {
     updateDoc
 } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
+import { writeNotification } from '../utils/notifications';
 import Image from 'next/image';
 import Link from 'next/link';
 import DashboardAdminSideNav from './DashboardAdminSideNav';
+import NotificationBell from './NotificationBell';
 
 // Types
 interface Conversation {
@@ -235,6 +237,17 @@ const DASHBOARDAdminMessages: React.FC = () => {
             );
 
             setNewMessage("");
+
+            // Notify the client
+            const preview = newMessage.length > 80 ? newMessage.slice(0, 80) + '…' : newMessage;
+            writeNotification(
+                selectedChat.userId,
+                'New message from Lucidify',
+                preview,
+                'message',
+                undefined,
+                '/dashboard/messages',
+            );
         } catch (error) {
             console.error("Error sending message:", error);
         }
@@ -305,14 +318,7 @@ const DASHBOARDAdminMessages: React.FC = () => {
                         </div>
                     </div>
                     <div className="inline-flex items-center gap-5">
-                        <div className="flex w-[55px] h-[55px] items-center justify-center gap-2.5 relative rounded-[100px] BlackGradient ContentCardShadow hover:cursor-pointer">
-                            <div className="flex flex-col w-5 h-5 items-center justify-center gap-2.5 px-[3px] py-0 absolute -top-[5px] -left-[4px] bg-[#6265f0] rounded-md">
-                                <div className="font-normal text-xs">2</div>
-                            </div>
-                            <div className="w-[25px]">
-                                <Image src="/Notification Bell Icon.png" alt="Bell Icon" layout="responsive" width={0} height={0} />
-                            </div>
-                        </div>
+                        <NotificationBell />
                         <Link href="/dashboard/settings" className="flex w-[129px] h-[55px] items-center justify-center gap-2.5 px-0 py-[15px] rounded-[15px] BlackGradient ContentCardShadow">
                             <div className="font-light text-sm">Settings</div>
                             <div className="w-[30px]">

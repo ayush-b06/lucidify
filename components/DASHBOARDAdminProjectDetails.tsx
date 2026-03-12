@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { collection, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { writeNotification } from '../utils/notifications';
 import { db } from '../firebaseConfig';
 import Link from 'next/link';
 import Image from 'next/image';
 import DashboardAdminSideNav from '@/components/DashboardAdminSideNav';
+import NotificationBell from '@/components/NotificationBell';
 
 interface DASHBOARDAdminProjectDetailsProps {
     userId: string;
@@ -107,9 +109,16 @@ const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProje
 
         try {
             const projectDocRef = doc(db, 'users', userId, 'projects', projectId);
-            await updateDoc(projectDocRef, {
-                paymentAmount: parseFloat(newPaymentAmount || '0'),
-            });
+            const amount = parseFloat(newPaymentAmount || '0');
+            await updateDoc(projectDocRef, { paymentAmount: amount });
+            writeNotification(
+                userId,
+                'Payment amount updated',
+                `Your project payment has been set to $${amount.toFixed(2)}.`,
+                'payment',
+                projectId,
+                `/dashboard/projects/${projectId}?projectId=${projectId}&userId=${userId}`,
+            );
             setNewPaymentAmount(null);
             window.location.reload();
         } catch (error) {
@@ -124,6 +133,14 @@ const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProje
             const projectDocRef = doc(db, 'users', userId, 'projects', projectId);
             await updateDoc(projectDocRef, { paymentPlan: newPaymentPlan });
             setProjectDetails((prev) => ({ ...prev, paymentPlan: newPaymentPlan }));
+            writeNotification(
+                userId,
+                'Payment plan updated',
+                `Your payment plan was changed to ${planLabels[newPaymentPlan] || 'a new plan'}.`,
+                'payment',
+                projectId,
+                `/dashboard/projects/${projectId}?projectId=${projectId}&userId=${userId}`,
+            );
         } catch (err) {
             // silently handle error
         }
@@ -136,6 +153,14 @@ const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProje
             const projectDocRef = doc(db, 'users', userId, 'projects', projectId);
             await updateDoc(projectDocRef, { paymentStatus: 'On Time' });
             setProjectDetails((prev) => ({ ...prev, paymentStatus: 'On Time' }));
+            writeNotification(
+                userId,
+                'Payment started',
+                'Your payment schedule has been activated. Your first payment is now due.',
+                'payment',
+                projectId,
+                `/dashboard/projects/${projectId}?projectId=${projectId}&userId=${userId}`,
+            );
         } catch (err) {
             // silently handle error
         }
@@ -202,20 +227,7 @@ const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProje
                         </div>
                     </div>
                     <div className="inline-flex items-center gap-4 flex-shrink-0">
-                        <div className="flex w-[45px] h-[45px] sm:w-[55px] sm:h-[55px] items-center justify-center gap-2.5 relative rounded-[100px] BlackGradient ContentCardShadow hover:cursor-pointer">
-                            <div className="flex flex-col w-5 h-5 items-center justify-center gap-2.5 px-[3px] py-0 absolute -top-[5px] -left-[4px] bg-[#6265f0] rounded-md">
-                                <div className="font-normal text-xs">2</div>
-                            </div>
-                            <div className="w-[22px] sm:w-[25px]">
-                                <Image
-                                    src="/Notification Bell Icon.png"
-                                    alt="Bell Icon"
-                                    layout="responsive"
-                                    width={0}
-                                    height={0}
-                                />
-                            </div>
-                        </div>
+                        <NotificationBell />
                         <Link
                             href="/dashboard/settings"
                             className="hidden sm:flex w-[129px] h-[55px] items-center justify-center gap-2.5 px-0 py-[15px] rounded-[15px] BlackGradient ContentCardShadow"

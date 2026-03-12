@@ -7,10 +7,12 @@ import {
     onSnapshot, orderBy, query, Timestamp, updateDoc
 } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
+import { writeAdminNotification } from '../utils/notifications';
 import DashboardClientSideNav from './DashboardClientSideNav';
 import Image from 'next/image';
 import Link from 'next/link';
 import AddDirectMessageModal from './AddDirectMessageModal';
+import NotificationBell from './NotificationBell';
 
 interface Message {
     id: string;
@@ -40,9 +42,11 @@ const DASHBOARDClientMessages = () => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [newMessage, setNewMessage] = useState('');
     const [myAvatar, setMyAvatar] = useState<string | null>(null);
+    const [myFirstName, setMyFirstName] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState('');
     const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
     const [isDMModalOpen, setIsDMModalOpen] = useState(false);
+    const [isSending, setIsSending] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -56,6 +60,7 @@ const DASHBOARDClientMessages = () => {
                 if (snap.exists()) {
                     const data = snap.data();
                     setMyAvatar(data.selectedAvatar || null);
+                    setMyFirstName(data.firstName || '');
                     // Ensure email is saved to Firestore (needed for DM search)
                     if (!data.email && user.email) {
                         await updateDoc(doc(db, 'users', user.uid), { email: user.email });
@@ -144,6 +149,7 @@ const DASHBOARDClientMessages = () => {
     // ── Select a conversation (mark read + fetch messages) ───────────────────
     const selectConversation = async (convo: ConvoItem) => {
         setSelectedId(convo.id);
+        setMessages([]);   // clear immediately so old messages don't linger
         setMobileView('chat');
         const user = auth.currentUser;
         if (!user) return;
@@ -186,7 +192,9 @@ const DASHBOARDClientMessages = () => {
 
         const q = query(messagesRef, orderBy('timestamp', 'asc'));
         const unsub = onSnapshot(q, snap => {
-            setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() } as Message)));
+            const real = snap.docs.map(d => ({ id: d.id, ...d.data() } as Message));
+            // Replace state with real messages (drops any optimistic pending-* entries)
+            setMessages(real);
         });
 
         return () => unsub();
@@ -201,42 +209,60 @@ const DASHBOARDClientMessages = () => {
 
     // ── Send message ──────────────────────────────────────────────────────────
     const sendMessage = async () => {
-        if (!newMessage.trim() || !selectedId) return;
+        const text = newMessage.trim();
+        if (!text || !selectedId || isSending) return;
         const user = authInstance.currentUser;
         if (!user) return;
 
         const selectedConvo = convos.find(c => c.id === selectedId);
         if (!selectedConvo) return;
 
+        setIsSending(true);
         const now = Timestamp.fromDate(new Date());
-        const msgData = { text: newMessage, sender: user.uid, timestamp: now, isRead: false };
+        const msgData = { text, sender: user.uid, timestamp: now, isRead: false };
+
+        // Optimistically clear input + show message immediately
+        setNewMessage('');
+        setMessages(prev => [...prev, { id: `pending-${Date.now()}`, ...msgData }]);
+        setConvos(prev => prev.map(c =>
+            c.id === selectedId ? { ...c, lastMessage: text, timestamp: now } : c
+        ));
 
         try {
             if (selectedConvo.type === 'lucidify') {
                 await addDoc(collection(db, 'users', user.uid, 'conversations', selectedId, 'messages'), msgData);
                 await updateDoc(doc(db, 'users', user.uid, 'conversations', selectedId), {
-                    lastMessage: newMessage,
+                    lastMessage: text,
                     lastMessageSender: user.uid,
                     timestamp: now,
                     'unreadCounts.Lucidify': increment(1),
                 });
+                // Notify admin
+                const senderName = myFirstName || 'A client';
+                const preview = text.length > 80 ? text.slice(0, 80) + '…' : text;
+                writeAdminNotification(
+                    `New message from ${senderName}`,
+                    preview,
+                    '/dashboard/messages',
+                );
             } else {
-                // DM: write to shared collection
                 await addDoc(collection(db, 'directMessages', selectedId, 'messages'), msgData);
                 const otherUid = selectedConvo.otherUserId!;
                 await updateDoc(doc(db, 'directMessages', selectedId), {
-                    lastMessage: newMessage,
+                    lastMessage: text,
                     lastMessageSender: user.uid,
                     timestamp: now,
                     [`unreadCounts.${otherUid}`]: increment(1),
                 });
             }
-
-            setConvos(prev => prev.map(c =>
-                c.id === selectedId ? { ...c, lastMessage: newMessage, timestamp: now } : c
-            ));
-            setNewMessage('');
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+            // Revert optimistic message on failure
+            setMessages(prev => prev.filter(m => !m.id.startsWith('pending-')));
+            setNewMessage(text);
+        } finally {
+            setIsSending(false);
+        }
     };
 
     // ── After DM created from modal ───────────────────────────────────────────
@@ -365,14 +391,7 @@ const DASHBOARDClientMessages = () => {
                             <div className="font-light text-sm">/ Messages</div>
                         </div>
                         <div className="inline-flex items-center gap-3 sm:gap-5">
-                            <div className="flex w-[45px] h-[45px] sm:w-[55px] sm:h-[55px] items-center justify-center relative rounded-[100px] BlackGradient ContentCardShadow hover:cursor-pointer">
-                                <div className="flex w-5 h-5 items-center justify-center px-[3px] absolute -top-[5px] -left-[4px] bg-[#6265f0] rounded-md">
-                                    <div className="font-normal text-xs">2</div>
-                                </div>
-                                <div className="w-[22px] sm:w-[25px]">
-                                    <Image src="/Notification Bell Icon.png" alt="Bell Icon" layout="responsive" width={0} height={0} />
-                                </div>
-                            </div>
+                            <NotificationBell />
                             <Link href="/dashboard/settings" className="hidden sm:flex w-[129px] h-[55px] items-center justify-center gap-2.5 rounded-[15px] BlackGradient ContentCardShadow">
                                 <div className="font-light text-sm">Settings</div>
                                 <div className="w-[30px]">
@@ -575,7 +594,7 @@ const DASHBOARDClientMessages = () => {
                                                     <Image src="/Microphone Icon.png" alt="Mic" layout="responsive" width={0} height={0} />
                                                 </div>
                                             </div>
-                                            <button onClick={sendMessage} className="w-[22px] sm:w-[25px] hover:opacity-70">
+                                            <button onClick={sendMessage} disabled={isSending} className="w-[22px] sm:w-[25px] hover:opacity-70 disabled:opacity-30">
                                                 <Image src="/Send Icon.png" alt="Send" layout="responsive" width={0} height={0} />
                                             </button>
                                         </div>

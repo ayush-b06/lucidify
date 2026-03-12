@@ -7,6 +7,7 @@ import DashboardClientSideNav from './DashboardClientSideNav';
 import Image from 'next/image';
 import Link from 'next/link';
 import CreateProjectPopup from './CreateProjectPopup';
+import NotificationBell from './NotificationBell';
 
 interface Project {
     uid: string;
@@ -189,64 +190,7 @@ const DASHBOARDClientProjects = () => {
                         </div>
                     </div>
                     <div className="inline-flex items-center gap-3">
-                        <div className="relative">
-                            <button
-                                onClick={() => setShowNotifications(!showNotifications)}
-                                className="flex w-[45px] h-[45px] sm:w-[55px] sm:h-[55px] items-center justify-center gap-2.5 rounded-[100px] BlackGradient ContentCardShadow">
-                                <div className="flex flex-col w-5 h-5 items-center justify-center gap-2.5 px-[3px] py-0 absolute -top-[5px] -left-[4px] bg-[#6265f0] rounded-md">
-                                    <div className=" font-normal text-xs">
-                                        2
-                                    </div>
-                                </div>
-                                <div className="w-[25px]">
-                                    <Image
-                                        src="/Notification Bell Icon.png"
-                                        alt="Bell Icon"
-                                        layout="responsive"
-                                        width={0}
-                                        height={0}
-                                    />
-                                </div>
-
-                            </button>
-                            <div className={`${showNotifications ? "opacity-100 translate-y-[0px]" : "pointer-events-none opacity-0 translate-y-[50px]"} absolute top-[65px] z-20 right-[0px] w-[300px] min-h-[200px] max-h-[250px] BlackGradient ContentCardShadow rounded-[15px]`}>
-                                <div className="pt-[10px] pb-[10px]">
-                                    <h1 className="px-[20px] text-[18px] font-medium tracking-[0.5px] pb-[10px]">Notifications</h1>
-                                    <div className="h-[0.5px] w-full BottomGradientBorder"></div>
-                                </div>
-                                <div className="px-[10px] flex items-start">
-                                    <button className="rounded-[10px] w-full hover:bg-[rgba(255,255,255,.07)] px-[10px] py-[11px] my-[2px] flex">
-
-                                        <div className="w-[20px] flex mt-[7px]">
-                                            <div className="PopupAttentionGradient PopupAttentionShadow rounded-full w-[6px] h-[6px]"></div>
-                                        </div>
-                                        <div className="flex flex-col">
-
-                                            <h2 className="font-light text-[14px]"><span className="font-medium">Lucidify</span> sent a message</h2>
-                                            <div className="flex">
-                                                <h3 className="text-[11px] font-light opacity-70">2 hours ago •&nbsp;</h3>
-                                                <h3 className="text-[11px] font-light opacity-70">Messages</h3>
-                                            </div>
-                                        </div>
-                                    </button>
-                                </div>
-                                <div className="px-[10px]  flex items-start">
-                                    <button className="rounded-[10px] w-full hover:bg-[rgba(255,255,255,.07)] px-[10px] py-[11px] my-[2px] flex">
-                                        <div className="w-[20px] flex mt-[7px]">
-                                            <div className="PopupAttentionGradient PopupAttentionShadow rounded-full w-[6px] h-[6px]"></div>
-                                        </div>
-                                        <div className="flex flex-col">
-
-                                            <h2 className="font-light text-[14px]">Your <span className="font-medium">project </span>has been <span className="font-medium">approved!</span></h2>
-                                            <div className="flex">
-                                                <h3 className="text-[11px] font-light opacity-70">17 hours ago •&nbsp;</h3>
-                                                <h3 className="text-[11px] font-light opacity-70">Projects</h3>
-                                            </div>
-                                        </div>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                        <NotificationBell />
                         <Link
                             href="/dashboard/settings"
                             className="hidden sm:flex w-[129px] h-[55px] items-center justify-center gap-2.5 px-0 py-[15px] rounded-[15px] BlackGradient ContentCardShadow">

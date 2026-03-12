@@ -6,6 +6,7 @@ import { db } from '../firebaseConfig';
 import DashboardClientSideNav from './DashboardClientSideNav';
 import Image from 'next/image';
 import Link from 'next/link';
+import NotificationBell from './NotificationBell';
 
 interface Project {
   uid: string;
@@ -103,12 +104,7 @@ const DASHBOARDClientDashboard = () => {
             <div className="font-light text-sm">/ Dashboard</div>
           </div>
           <div className="inline-flex items-center gap-5">
-            <div className="flex w-[55px] h-[55px] items-center justify-center relative rounded-[100px] BlackGradient ContentCardShadow hover:cursor-pointer">
-              <div className="flex w-5 h-5 items-center justify-center px-[3px] absolute -top-[5px] -left-[4px] bg-[#6265f0] rounded-md">
-                <div className="font-normal text-xs">2</div>
-              </div>
-              <div className="w-[25px]"><Image src="/Notification Bell Icon.png" alt="Bell" layout="responsive" width={0} height={0} /></div>
-            </div>
+            <NotificationBell />
             <Link href="/dashboard/settings" className="flex w-[129px] h-[55px] items-center justify-center gap-2.5 rounded-[15px] BlackGradient ContentCardShadow">
               <div className="font-light text-sm">Settings</div>
               <div className="w-[30px]"><Image src="/Settings Icon.png" alt="Settings" layout="responsive" width={0} height={0} /></div>

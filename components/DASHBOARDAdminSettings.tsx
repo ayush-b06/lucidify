@@ -1,179 +1,182 @@
+"use client";
+
 import { useEffect, useState } from 'react';
-import { getAuth, signOut } from 'firebase/auth';
+import { getAuth, signOut, sendPasswordResetEmail, deleteUser } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import DashboardAdminSideNav from './DashboardAdminSideNav';
 import Image from 'next/image';
 import Link from 'next/link';
+import NotificationBell from './NotificationBell';
 
 const DASHBOARDAdminSettings = () => {
-  const [firstName, setFirstName] = useState<String | null>(null);
-  const [showLogoutPopup, setShowLogoutPopup] = useState(false); // State for the popup
-  const auth = getAuth();
-  const router = useRouter();
+    const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+    const [showDeletePopup, setShowDeletePopup] = useState(false);
+    const [resetEmailSent, setResetEmailSent] = useState(false);
+    const [resetLoading, setResetLoading] = useState(false);
+    const auth = getAuth();
+    const router = useRouter();
 
-  useEffect(() => {
-    const fetchUserData = async () => {
-      const user = auth.currentUser;
+    useEffect(() => {
+        const user = auth.currentUser;
+        if (!user) { router.push('/login'); }
+    }, [auth, router]);
 
-      if (!user) {
+    const handleLogOut = async () => {
+        await signOut(auth);
         router.push('/login');
-        return;
-      }
-
-      try {
-        const docRef = doc(db, 'users', user.uid);
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setFirstName(data.firstName);
-        } else {
-          console.log('No such document!');
-        }
-      } catch (error) {
-        console.error('Error fetching user data: ', error);
-      }
     };
 
-    fetchUserData();
-  }, [auth, router]);
+    const handlePasswordReset = async () => {
+        const user = auth.currentUser;
+        if (!user?.email) return;
+        setResetLoading(true);
+        try {
+            await sendPasswordResetEmail(auth, user.email);
+            setResetEmailSent(true);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setResetLoading(false);
+        }
+    };
 
-  const handleLogOut = async () => {
-    try {
-      await signOut(auth);
-      router.push('/login');
-    } catch (error) {
-      console.error('Error logging out: ', error);
-    }
-  };
+    const handleDeleteAccount = async () => {
+        const user = auth.currentUser;
+        if (!user) return;
+        try {
+            await deleteDoc(doc(db, 'users', user.uid));
+            await deleteUser(user);
+            router.push('/');
+        } catch (e) {
+            console.error(e);
+        }
+    };
 
-  return (
-    <div className="flex flex-col xl:flex-row h-screen DashboardBackgroundGradient overflow-hidden relative">
+    return (
+        <div className="flex flex-col xl:flex-row h-screen DashboardBackgroundGradient overflow-hidden relative">
+            <DashboardAdminSideNav highlight="none" />
 
+            <div className="flex-1 flex flex-col pt-[60px] xl:pt-0 min-h-0 overflow-hidden">
+                {/* Top bar border */}
+                <div className="absolute BottomGradientBorder left-0 top-[103px] w-full" />
 
-      {/* Left Sidebar */}
-      <DashboardAdminSideNav highlight="none" />
-
-      {/* Right Side (Main Content) */}
-      <div className="flex-1 flex flex-col pt-[60px] xl:pt-0">
-        <div className="absolute BottomGradientBorder left-0 top-[103px] w-full" />
-
-        <div className="flex min-w-min items-center justify-between px-[50px] py-6">
-          <div className="inline-flex items-center gap-[5px]">
-            <div className="inline-flex items-center gap-[5px] opacity-40">
-              <div className="w-[15px]">
-                <Image
-                  src="/Home Icon.png"
-                  alt="Home Icon"
-                  layout="responsive"
-                  width={0}
-                  height={0}
-                />
-              </div>
-              <div className="w-fit mt-[-1.00px] font-light text-sm tracking-[0] leading-[normal]">
-                Home
-              </div>
-            </div>
-            <div className="inline-flex items-center gap-[5px]">
-              <div className=" w-fit mt-[-1.00px] font-light text-sm tracking-[0] leading-[normal]">
-                / Settings
-              </div>
-            </div>
-          </div>
-          <div className="inline-flex items-center gap-5">
-            <div className="flex w-[55px] h-[55px] items-center justify-center gap-2.5 relative rounded-[100px] BlackGradient ContentCardShadow hover:cursor-pointer">
-              <div className="flex flex-col w-5 h-5 items-center justify-center gap-2.5 px-[3px] py-0 absolute -top-[5px] -left-[4px] bg-[#6265f0] rounded-md">
-                <div className=" w-fit font-normal text-xs tracking-[0] leading-[normal]">
-                  2
+                {/* Top bar */}
+                <div className="flex items-center justify-between px-[20px] sm:px-[50px] py-6 flex-shrink-0">
+                    <div className="inline-flex items-center gap-[5px]">
+                        <div className="inline-flex items-center gap-[5px] opacity-40">
+                            <div className="w-[15px]">
+                                <Image src="/Home Icon.png" alt="Home Icon" layout="responsive" width={0} height={0} />
+                            </div>
+                            <div className="font-light text-sm">Home</div>
+                        </div>
+                        <div className="font-light text-sm">/ Settings</div>
+                    </div>
+                    <div className="inline-flex items-center gap-5">
+                        <NotificationBell />
+                        <Link href="/dashboard/settings" className="flex w-[129px] h-[55px] items-center justify-center gap-2.5 rounded-[15px] BlackGradient ContentCardShadow">
+                            <div className="font-light text-sm">Settings</div>
+                            <div className="w-[30px]">
+                                <Image src="/Settings Icon.png" alt="Settings Icon" layout="responsive" width={0} height={0} />
+                            </div>
+                        </Link>
+                    </div>
                 </div>
-              </div>
-              <div className=" w-[25px]">
-                <Image
-                  src="/Notification Bell Icon.png"
-                  alt="Bell Icon"
-                  layout="responsive"
-                  width={0}
-                  height={0}
-                />
-              </div>
-            </div>
-            <Link
-              href="/dashboard/settings"
-              className="flex w-[129px] h-[55px] items-center justify-center gap-2.5 px-0 py-[15px]  rounded-[15px] BlackGradient ContentCardShadow"
-            >
-              <div className=" w-fit font-light text-sm tracking-[0] leading-[normal]">
-                Settings
-              </div>
-              <div className=" w-[30px]">
-                <Image
-                  src="/Settings Icon.png"
-                  alt="Settings Icon"
-                  layout="responsive"
-                  width={0}
-                  height={0}
-                />
-              </div>
-            </Link>
-          </div>
-        </div>
 
-        <div className="flex w-full justify-center">
-          <div className="flex flex-col gap-[15px] relative w-full mx-[50px] my-[30px]">
-            <div className="flex flex-col">
-              <h1 className="text-[30px] font-semibold mb-[2px]">Settings</h1>
-              <h3 className="text-[14px] font-light opacity-60">
-                Manage your dashboard settings here.
-              </h3>
-            </div>
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">
+                    <div className="mb-[28px]">
+                        <h1 className="text-[28px] font-semibold mb-[4px]">Settings</h1>
+                        <p className="text-[14px] font-light opacity-50">Manage your admin account preferences.</p>
+                    </div>
 
-            <div
-              className="flex flex-col w-[100px] h-[41px] items-center justify-center gap-2.5 px-[18px] py-2 relative rounded-[10px] ContentCardShadow LogoutGradient hover:cursor-pointer active:scale-90"
-              onClick={() => setShowLogoutPopup(true)}
-            >
-              <div className="inline-flex items-center gap-2.5 relative">
-                <div className="relative font-light text-[15px] text-center">
-                  Log Out
+                    <div className="flex flex-col gap-[14px] max-w-[680px]">
+
+                        {/* Security */}
+                        <div className="BlackGradient ContentCardShadow rounded-[20px] px-[24px] sm:px-[30px] py-[24px]">
+                            <h2 className="text-[16px] font-semibold mb-[3px]">Security</h2>
+                            <p className="text-[12px] opacity-40 font-light mb-[20px]">Manage your admin account security.</p>
+                            <div className="flex items-center justify-between gap-[20px]">
+                                <div>
+                                    <div className="text-[14px] font-light">Password Reset</div>
+                                    <div className="text-[12px] opacity-35 font-light mt-[2px]">
+                                        {resetEmailSent ? 'Reset email sent — check your inbox.' : 'Send a password reset link to your email.'}
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={handlePasswordReset}
+                                    disabled={resetLoading || resetEmailSent}
+                                    className="flex-shrink-0 px-[16px] py-[8px] BlackWithLightGradient ContentCardShadow rounded-[10px] text-[13px] font-light disabled:opacity-40 active:scale-95 transition-transform whitespace-nowrap"
+                                >
+                                    {resetLoading ? 'Sending...' : resetEmailSent ? 'Email Sent ✓' : 'Send Reset Email'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Log Out */}
+                        <div className="BlackGradient ContentCardShadow rounded-[20px] px-[24px] sm:px-[30px] py-[24px]">
+                            <div className="flex items-center justify-between gap-[20px]">
+                                <div>
+                                    <div className="text-[14px] font-light">Log Out</div>
+                                    <div className="text-[12px] opacity-35 font-light mt-[2px]">Sign out of your Lucidify Admin account.</div>
+                                </div>
+                                <button
+                                    onClick={() => setShowLogoutPopup(true)}
+                                    className="flex-shrink-0 px-[16px] py-[8px] LogoutGradient ContentCardShadow rounded-[10px] text-[13px] font-light active:scale-95 transition-transform whitespace-nowrap"
+                                >
+                                    Log Out
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Danger Zone */}
+                        <div className="rounded-[20px] px-[24px] sm:px-[30px] py-[24px] border border-red-500/20 bg-red-500/5">
+                            <h2 className="text-[16px] font-semibold mb-[3px] text-red-400">Danger Zone</h2>
+                            <p className="text-[12px] opacity-40 font-light mb-[20px]">Permanent actions that cannot be undone.</p>
+                            <div className="flex items-center justify-between gap-[20px]">
+                                <div>
+                                    <div className="text-[14px] font-light">Delete Account</div>
+                                    <div className="text-[12px] opacity-35 font-light mt-[2px]">Permanently remove this admin account and all associated data.</div>
+                                </div>
+                                <button
+                                    onClick={() => setShowDeletePopup(true)}
+                                    className="flex-shrink-0 px-[16px] py-[8px] bg-red-500/15 border border-red-500/30 rounded-[10px] text-[13px] font-light text-red-400 active:scale-95 transition-transform whitespace-nowrap hover:bg-red-500/25"
+                                >
+                                    Delete Account
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
                 </div>
-              </div>
             </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Logout Confirmation Popup */}
-        {/* <div> className={`h-screen bg-black bg-opacity-50 ${showLogoutPopup ? 'opacity-100 translate-y-0' : 'opacity-0 pointer-events-none translate-y-[50px]'
-        } fixed inset-x-0 inset-y-0 flex justify-center items-center z-20`} */}
-        <div className={`ease-in-out duration-500 absolute bg-black bg-opacity-50 z-10 w-full h-full ${showLogoutPopup ? 'opacity-100 visible' : ' opacity-0 invisible'} opacity-0`}>
-          <div className="absolute left-0 top-0 flex justify-center items-center w-full h-full">
-            {/* Popup Content with Animation */}
-            <div className={`ContentCardShadow BlackGradient rounded-xl p-6 w-[300px] shadow-lg flex flex-col items-center gap-[30px] ${showLogoutPopup ? 'opacity-100 visible translate-y-0' : ' opacity-0 invisible -translate-y-[50px]'}`}>
-              <h2 className="text-[18px] font-semibold text-center">
-                Are you sure you want to log out?
-              </h2>
-              <div className="flex gap-[30px]">
-                <button
-                  onClick={handleLogOut}
-                  className="px-4 py-2 AddProjectGradient ContentCardShadow text-[14px] font-light rounded-md"
-                >
-                  Yes, Log Out
-                </button>
-                <button
-                  onClick={() => setShowLogoutPopup(false)}
-                  className="px-4 py-2 ContentCardShadow BlackGradient rounded-[15px] hover:bg-gray-400 text-[14px] font-light"
-                >
-                  Cancel
-                </button>
-              </div>
+            {/* Logout Popup */}
+            <div className={`ease-in-out duration-300 fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center transition-opacity ${showLogoutPopup ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}>
+                <div className={`ContentCardShadow BlackGradient rounded-[20px] p-[30px] w-[300px] flex flex-col items-center gap-[24px] transition-all duration-300 ${showLogoutPopup ? 'translate-y-0 opacity-100' : '-translate-y-[30px] opacity-0'}`}>
+                    <h2 className="text-[17px] font-semibold text-center">Are you sure you want to log out?</h2>
+                    <div className="flex gap-[12px] w-full">
+                        <button onClick={handleLogOut} className="flex-1 py-[10px] AddProjectGradient ContentCardShadow text-[13px] font-light rounded-[10px] active:scale-95">Yes, Log Out</button>
+                        <button onClick={() => setShowLogoutPopup(false)} className="flex-1 py-[10px] BlackWithLightGradient ContentCardShadow text-[13px] font-light rounded-[10px] active:scale-95">Cancel</button>
+                    </div>
+                </div>
             </div>
-          </div>
+
+            {/* Delete Account Popup */}
+            <div className={`ease-in-out duration-300 fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center transition-opacity ${showDeletePopup ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}>
+                <div className={`ContentCardShadow BlackGradient rounded-[20px] p-[30px] w-[320px] flex flex-col items-center gap-[18px] transition-all duration-300 ${showDeletePopup ? 'translate-y-0 opacity-100' : '-translate-y-[30px] opacity-0'}`}>
+                    <div className="text-[30px]">⚠️</div>
+                    <h2 className="text-[17px] font-semibold text-center">Delete this admin account?</h2>
+                    <p className="text-[12px] opacity-40 font-light text-center leading-relaxed">This will permanently delete the account and all associated data. This cannot be undone.</p>
+                    <div className="flex gap-[12px] w-full">
+                        <button onClick={handleDeleteAccount} className="flex-1 py-[10px] bg-red-500/20 border border-red-500/30 text-red-400 text-[13px] font-light rounded-[10px] active:scale-95">Delete</button>
+                        <button onClick={() => setShowDeletePopup(false)} className="flex-1 py-[10px] BlackWithLightGradient ContentCardShadow text-[13px] font-light rounded-[10px] active:scale-95">Cancel</button>
+                    </div>
+                </div>
+            </div>
         </div>
-      
-
-
-    </div>
-  );
+    );
 };
 
 export default DASHBOARDAdminSettings;

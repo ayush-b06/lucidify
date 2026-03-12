@@ -568,37 +568,37 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
 
       <nav className="top-[40px] fixed flex px-[40px] py-[10px] bg-gradient-to-br from-[#d6ceff] via-white/100 to-[#d6ceff] ContentCardShadow  rounded-full">
         <div className="flex gap-[20px]">
-          <button className={`ButtonLessBoxShadow w-[160px] button h-[50px] rounded-[40px] border-solid border-l-[1px] border-[#a5b4fcc4] ${step >= 1 ? "opacity-100" : "opacity-80 pointer-events-none"} ${firstName && lastName && selectedStateAbbv && city && "opacity-100 ButtonDone"}`}
+          <button className={`ButtonLessBoxShadow w-[160px] button h-[50px] rounded-[40px] border-solid border-l-[1px] border-[#a5b4fcc4] ${step >= 1 ? "opacity-100" : "opacity-80 pointer-events-none"} ${firstName && selectedStateAbbv && city && "opacity-100 ButtonDone"}`}
             onClick={() => handleContinue(1)}  // Trigger transition
           >
             <div className="button__content rounded-[40px]">
               <div className="button__icon">
               </div>
-              <p className={`button__text ${firstName && lastName && selectedStateAbbv && city ? "text-black" : "text-[rgba(0,0,0,0.6)]"} `}>Profile</p>
+              <p className={`button__text ${firstName && selectedStateAbbv && city ? "text-black" : "text-[rgba(0,0,0,0.6)]"} `}>Profile</p>
             </div>
           </button>
 
-          <button className={`ButtonLessBoxShadow w-[180px] button h-[50px] rounded-[40px] border-solid border-l-[1px] border-[#a5b4fcc4] ${firstName && lastName && selectedStateAbbv && city ? "opacity-100" : "opacity-80 pointer-events-none"} ${companyName && companyURL && companySize && companyRole && "opacity-100 ButtonDone"}`}
+          <button className={`ButtonLessBoxShadow w-[180px] button h-[50px] rounded-[40px] border-solid border-l-[1px] border-[#a5b4fcc4] ${firstName && selectedStateAbbv && city ? "opacity-100" : "opacity-80 pointer-events-none"} ${companyName && companyURL && companySize && companyRole && "opacity-100 ButtonDone"}`}
             onClick={() => handleContinue(2)}  // Trigger transition
-            disabled={!firstName || !lastName || !selectedStateAbbv || !city}>
+            disabled={!firstName || !selectedStateAbbv || !city}>
             <div className="button__content rounded-[40px]">
               <div className="button__icon">
               </div>
-              <p className={`button__text ${firstName && lastName && selectedStateAbbv && city ? "text-black" : "text-[rgba(0,0,0,0.6)]"} `}>Company</p>
+              <p className={`button__text ${firstName && selectedStateAbbv && city ? "text-black" : "text-[rgba(0,0,0,0.6)]"} `}>Company</p>
             </div>
           </button>
 
-          <button className={`ButtonLessBoxShadow w-[160px] button h-[50px] rounded-[40px] border-solid border-l-[1px] border-[#a5b4fcc4] ${firstName && lastName && selectedStateAbbv && city && section3Visited ? "opacity-100" : "opacity-80 pointer-events-none"} ${selectedServices.length > 0 && selectedChallenges.length > 0 && idealOutcome && "opacity-100 ButtonDone"}`}
+          <button className={`ButtonLessBoxShadow w-[160px] button h-[50px] rounded-[40px] border-solid border-l-[1px] border-[#a5b4fcc4] ${firstName && selectedStateAbbv && city && section3Visited ? "opacity-100" : "opacity-80 pointer-events-none"} ${selectedServices.length > 0 && selectedChallenges.length > 0 && idealOutcome && "opacity-100 ButtonDone"}`}
             onClick={() => handleContinue(3)}  // Trigger transition
-            disabled={!firstName || !lastName || !selectedStateAbbv || !city || !section3Visited}>
+            disabled={!firstName || !selectedStateAbbv || !city || !section3Visited}>
             <div className="button__content rounded-[40px]">
               <div className="button__icon">
               </div>
-              <p className={`button__text ${firstName && lastName && selectedStateAbbv && city && section3Visited ? "text-black" : "text-[rgba(0,0,0,0.6)]"} `}>Vision</p>
+              <p className={`button__text ${firstName && selectedStateAbbv && city && section3Visited ? "text-black" : "text-[rgba(0,0,0,0.6)]"} `}>Vision</p>
             </div>
           </button>
 
-          <button className={`ButtonLessBoxShadow w-[190px] button h-[50px] rounded-[40px] border-solid border-l-[1px] border-[#a5b4fcc4] ${firstName && lastName && selectedStateAbbv && city && section3Visited ? "opacity-100" : "opacity-80 pointer-events-none"} ${selectedAvatar && "opacity-100 ButtonDone"}`}
+          <button className={`ButtonLessBoxShadow w-[190px] button h-[50px] rounded-[40px] border-solid border-l-[1px] border-[#a5b4fcc4] ${firstName && selectedStateAbbv && city && section3Visited ? "opacity-100" : "opacity-80 pointer-events-none"} ${selectedAvatar && "opacity-100 ButtonDone"}`}
             onClick={() => handleContinue(4)}  // Trigger transition
             disabled={selectedServices.length === 0 || selectedChallenges.length === 0 || !idealOutcome}>
             <div className="button__content rounded-[40px]">
@@ -669,7 +669,7 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
             <div className="flex flex-col gap-[10px]">
               <div className="flex justify-between relative">
 
-                <div className="w-[47%] flex flex-col items-start gap-[3px]">
+                <div className="w-full flex flex-col items-start gap-[3px]">
                   <h3 className="text-black text-[14px]">What&apos;s your first name?<span className="text-[#7160DE] font-bold text-[16px]">*</span></h3>
                   <input
                     type="text"
@@ -681,14 +681,11 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
                   />
                 </div>
 
-                <div className="w-[47%] flex flex-col items-start gap-[3px]">
-                  <h3 className="text-black text-[14px]">What&apos;s your last name?<span className="text-[#7160DE] font-bold text-[16px]">*</span></h3>
+                <div className="hidden">
                   <input
                     type="text"
-                    placeholder="Doe"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    className="w-full text-black bg-[rgba(255,255,255,0.10)] shadow-sm shadow-gray-400 rounded-lg p-2 pl-[12px] focus:outline-none focus:ring-1 focus:ring-[rgba(0,0,0,0.25)]"
                     required
                   />
                 </div>
@@ -769,19 +766,19 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
 
 
             {/* <button
-              className={`w-full ${firstName && lastName && selectedStateAbbv && city ? "text-white" : "text-[rgba(0,0,0,0.5)]"} py-2 mt-4 rounded-lg bg-${firstName && lastName && selectedStateAbbv && city ? "[#725CF7]" : "[rgba(114,92,247,0.5)]"} shadow-lg shadow-indigo-300 ${firstName && lastName && selectedStateAbbv && city && "hover:bg-[#5D3AEA]"}`}
+              className={`w-full ${firstName && selectedStateAbbv && city ? "text-white" : "text-[rgba(0,0,0,0.5)]"} py-2 mt-4 rounded-lg bg-${firstName && selectedStateAbbv && city ? "[#725CF7]" : "[rgba(114,92,247,0.5)]"} shadow-lg shadow-indigo-300 ${firstName && selectedStateAbbv && city && "hover:bg-[#5D3AEA]"}`}
               onClick={() => handleContinue(2)}  // Trigger transition
-              disabled={!firstName || !lastName || !selectedStateAbbv || !city}
+              disabled={!firstName || !selectedStateAbbv || !city}
             >
               Continue
             </button> */}
-            <button className={`w-full button h-[50px] rounded-[40px] ${firstName && lastName && selectedStateAbbv && city ? "opacity-100" : "opacity-80 pointer-events-none"} mt-[26px]`}
+            <button className={`w-full button h-[50px] rounded-[40px] ${firstName && selectedStateAbbv && city ? "opacity-100" : "opacity-80 pointer-events-none"} mt-[26px]`}
               onClick={() => handleContinue(2)}  // Trigger transition
-              disabled={!firstName || !lastName || !selectedStateAbbv || !city}                >
+              disabled={!firstName || !selectedStateAbbv || !city}                >
               <div className="button__content rounded-[40px]">
                 <div className="button__icon">
                 </div>
-                <p className={`button__text ${firstName && lastName && selectedStateAbbv && city ? "text-black" : "text-[rgba(0,0,0,0.6)]"} `}>Continue</p>
+                <p className={`button__text ${firstName && selectedStateAbbv && city ? "text-black" : "text-[rgba(0,0,0,0.6)]"} `}>Continue</p>
               </div>
             </button>
           </div>
@@ -943,14 +940,14 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
                 {/* <button
                   className={`w-[35%] hover:-translate-y-[3px] hover:-translate-x-[2px] hover:scale-[101%] hover:shadow-xl hover:shadow-indigo-300 text-white py-2 mt-4 rounded-lg bg-[rgba(0,0,0,0.6)] shadow-lg shadow-indigo-300 "hover:bg-[#5D3AEA]"`}
                   onClick={() => handleContinue(3)}  // Trigger transition
-                  disabled={!firstName || !lastName || !selectedStateAbbv || !city}
+                  disabled={!firstName || !selectedStateAbbv || !city}
                 >
                   Back
                 </button> */}
                 {/* <button
-                  className={`w-[42%] hover:-translate-y-[3px] hover:translate-x-[2px] hover:scale-[101%] hover:shadow-xl hover:shadow-indigo-300 ${firstName && lastName && selectedStateAbbv && city ? "text-white" : "text-[rgba(0,0,0,0.5)]"} py-2 mt-4 rounded-lg bg-${firstName && lastName && selectedStateAbbv && city ? "[#725CF7]" : "[rgba(114,92,247,0.5)]"} shadow-lg shadow-indigo-300 ${firstName && lastName && selectedStateAbbv && city && "hover:bg-[#5D3AEA]"}`}
+                  className={`w-[42%] hover:-translate-y-[3px] hover:translate-x-[2px] hover:scale-[101%] hover:shadow-xl hover:shadow-indigo-300 ${firstName && selectedStateAbbv && city ? "text-white" : "text-[rgba(0,0,0,0.5)]"} py-2 mt-4 rounded-lg bg-${firstName && selectedStateAbbv && city ? "[#725CF7]" : "[rgba(114,92,247,0.5)]"} shadow-lg shadow-indigo-300 ${firstName && selectedStateAbbv && city && "hover:bg-[#5D3AEA]"}`}
                   onClick={() => handleContinue(3)}  // Trigger transition
-                  disabled={!firstName || !lastName || !selectedStateAbbv || !city}
+                  disabled={!firstName || !selectedStateAbbv || !city}
                 >
                   Continue
                 </button> */}
@@ -1161,14 +1158,14 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
                 {/* <button
                   className={`w-[35%] hover:-translate-y-[3px] hover:-translate-x-[2px] hover:scale-[101%] hover:shadow-xl hover:shadow-indigo-300 text-white py-2 mt-4 rounded-lg bg-[rgba(0,0,0,0.6)] shadow-lg shadow-indigo-300 "hover:bg-[#5D3AEA]"`}
                   onClick={() => handleContinue(3)}  // Trigger transition
-                  disabled={!firstName || !lastName || !selectedStateAbbv || !city}
+                  disabled={!firstName || !selectedStateAbbv || !city}
                 >
                   Back
                 </button> */}
                 {/* <button
-                  className={`w-[42%] hover:-translate-y-[3px] hover:translate-x-[2px] hover:scale-[101%] hover:shadow-xl hover:shadow-indigo-300 ${firstName && lastName && selectedStateAbbv && city ? "text-white" : "text-[rgba(0,0,0,0.5)]"} py-2 mt-4 rounded-lg bg-${firstName && lastName && selectedStateAbbv && city ? "[#725CF7]" : "[rgba(114,92,247,0.5)]"} shadow-lg shadow-indigo-300 ${firstName && lastName && selectedStateAbbv && city && "hover:bg-[#5D3AEA]"}`}
+                  className={`w-[42%] hover:-translate-y-[3px] hover:translate-x-[2px] hover:scale-[101%] hover:shadow-xl hover:shadow-indigo-300 ${firstName && selectedStateAbbv && city ? "text-white" : "text-[rgba(0,0,0,0.5)]"} py-2 mt-4 rounded-lg bg-${firstName && selectedStateAbbv && city ? "[#725CF7]" : "[rgba(114,92,247,0.5)]"} shadow-lg shadow-indigo-300 ${firstName && selectedStateAbbv && city && "hover:bg-[#5D3AEA]"}`}
                   onClick={() => handleContinue(3)}  // Trigger transition
-                  disabled={!firstName || !lastName || !selectedStateAbbv || !city}
+                  disabled={!firstName || !selectedStateAbbv || !city}
                 >
                   Continue
                 </button> */}
@@ -1255,14 +1252,14 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
                 {/* <button
                   className={`w-[35%] hover:-translate-y-[3px] hover:-translate-x-[2px] hover:scale-[101%] hover:shadow-xl hover:shadow-indigo-300 text-white py-2 mt-4 rounded-lg bg-[rgba(0,0,0,0.6)] shadow-lg shadow-indigo-300 "hover:bg-[#5D3AEA]"`}
                   onClick={() => handleContinue(3)}  // Trigger transition
-                  disabled={!firstName || !lastName || !selectedStateAbbv || !city}
+                  disabled={!firstName || !selectedStateAbbv || !city}
                 >
                   Back
                 </button> */}
                 {/* <button
-                  className={`w-[42%] hover:-translate-y-[3px] hover:translate-x-[2px] hover:scale-[101%] hover:shadow-xl hover:shadow-indigo-300 ${firstName && lastName && selectedStateAbbv && city ? "text-white" : "text-[rgba(0,0,0,0.5)]"} py-2 mt-4 rounded-lg bg-${firstName && lastName && selectedStateAbbv && city ? "[#725CF7]" : "[rgba(114,92,247,0.5)]"} shadow-lg shadow-indigo-300 ${firstName && lastName && selectedStateAbbv && city && "hover:bg-[#5D3AEA]"}`}
+                  className={`w-[42%] hover:-translate-y-[3px] hover:translate-x-[2px] hover:scale-[101%] hover:shadow-xl hover:shadow-indigo-300 ${firstName && selectedStateAbbv && city ? "text-white" : "text-[rgba(0,0,0,0.5)]"} py-2 mt-4 rounded-lg bg-${firstName && selectedStateAbbv && city ? "[#725CF7]" : "[rgba(114,92,247,0.5)]"} shadow-lg shadow-indigo-300 ${firstName && selectedStateAbbv && city && "hover:bg-[#5D3AEA]"}`}
                   onClick={() => handleContinue(3)}  // Trigger transition
-                  disabled={!firstName || !lastName || !selectedStateAbbv || !city}
+                  disabled={!firstName || !selectedStateAbbv || !city}
                 >
                   Continue
                 </button> */}

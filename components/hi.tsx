@@ -7,6 +7,7 @@ import DashboardSideNav from './DashboardClientSideNav';
 import Image from 'next/image';
 import Link from 'next/link';
 import CreateProjectPopup from './CreateProjectPopup';
+import NotificationBell from './NotificationBell';
 
 interface Conversation {
     id: string;
@@ -207,22 +208,7 @@ const DASHBOARDClientMessages = () => {
                         </div>
                     </div>
                     <div className="inline-flex items-center gap-5">
-                        <div className="flex w-[55px] h-[55px] items-center justify-center gap-2.5 relative rounded-[100px] BlackGradient ContentCardShadow hover:cursor-pointer">
-                            <div className="flex flex-col w-5 h-5 items-center justify-center gap-2.5 px-[3px] py-0 absolute -top-[5px] -left-[4px] bg-[#6265f0] rounded-md">
-                                <div className=" font-normal text-xs">
-                                    2
-                                </div>
-                            </div>
-                            <div className=" w-[25px]">
-                                <Image
-                                    src="/Notification Bell Icon.png"
-                                    alt="Bell Icon"
-                                    layout="responsive"
-                                    width={0}
-                                    height={0}
-                                />
-                            </div>
-                        </div>
+                        <NotificationBell />
                         <Link
                             href="/settings"
                             className="flex w-[129px] h-[55px] items-center justify-center gap-2.5 px-0 py-[15px]  rounded-[15px] BlackGradient ContentCardShadow">

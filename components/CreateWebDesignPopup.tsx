@@ -13,6 +13,7 @@ interface CreateWebDesignPopupProps {
     isVisible: boolean;
     projectId: string; // Add projectId to the props
     userId: string;
+    onDesignAdded?: () => void;
 }
 
 interface FormData {
@@ -32,7 +33,7 @@ const getOrdinal = (n: number): string => {
     return suffixes[(value - 20) % 10] || suffixes[value] || suffixes[0];
 };
 
-const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatProjectPopup, isVisible, projectId, userId }) => {
+const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatProjectPopup, isVisible, projectId, userId, onDesignAdded }) => {
     const { user } = useAuth();  // Access the authenticated user
     const router = useRouter();  // Access the router
 
@@ -120,7 +121,7 @@ const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatP
 
             console.log('Web design successfully created!');
 
-            // Optionally, redirect or close the popup after submission
+            onDesignAdded?.();
             closeCreatProjectPopup();
         } catch (error) {
             console.error('Error adding document: ', error);

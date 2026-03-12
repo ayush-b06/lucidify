@@ -1,7 +1,7 @@
 "use client";
 
 import { auth, db } from '@/firebaseConfig';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot } from 'firebase/firestore';
 import Image from 'next/image';
 import Link from 'next/link';
 import React, { useEffect, useState } from 'react';
@@ -13,6 +13,30 @@ type DashboardSideNAdminavProps = {
 const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight }) => {
     const [totalUnread, setTotalUnread] = useState<number>(0);
     const [isOpen, setIsOpen] = useState(false);
+    const [userData, setUserData] = useState<{
+        selectedAvatar: string | null;
+        firstName: string | null;
+        lastName: string | null;
+        setupComplete: boolean;
+    }>({ selectedAvatar: null, firstName: null, lastName: null, setupComplete: false });
+
+    useEffect(() => {
+        const user = auth.currentUser;
+        if (!user) return;
+        const userRef = doc(db, 'users', user.uid);
+        const unsub = onSnapshot(userRef, (snap) => {
+            if (snap.exists()) {
+                const d = snap.data();
+                setUserData({
+                    selectedAvatar: d.selectedAvatar || null,
+                    firstName: d.firstName || null,
+                    lastName: d.lastName || null,
+                    setupComplete: d.setUp || false,
+                });
+            }
+        });
+        return () => unsub();
+    }, []);
 
     useEffect(() => {
         const fetchTotalUnread = async () => {
@@ -40,6 +64,7 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
         { href: "/dashboard/messages", label: "Messages", icon: "/Messages Icon.png", key: "messages" },
         { href: "/dashboard/transactions", label: "Transactions", icon: "/Transactions Icon.png", key: "transactions" },
     ];
+
 
     return (
         <>
@@ -77,20 +102,22 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
                         <button onClick={() => setIsOpen(false)} className="opacity-60 hover:opacity-100 text-[22px] leading-none">✕</button>
                     </div>
 
-                    <Link href="/dashboard/get-started" onClick={() => setIsOpen(false)}
-                        className={`${highlight === "getStarted" ? "BlackWithLightGradient ContentCardShadow" : ""} flex items-center rounded-[10px] mb-[30px]`}>
-                        <div className="flex mx-[10px] my-[7px] items-center justify-between w-full">
-                            <div className={`${highlight === "getStarted" ? "opacity-100" : "opacity-50"} flex items-center`}>
-                                <div className="relative w-[20px] h-[20px] mr-[4px]">
-                                    <Image src="/Get Started Icon.png" alt="Get Started" layout="responsive" width={0} height={0} />
+                    {!userData.setupComplete && (
+                        <Link href="/dashboard/get-started" onClick={() => setIsOpen(false)}
+                            className={`${highlight === "getStarted" ? "BlackWithLightGradient ContentCardShadow" : ""} flex items-center rounded-[10px] mb-[30px]`}>
+                            <div className="flex mx-[10px] my-[7px] items-center justify-between w-full">
+                                <div className={`${highlight === "getStarted" ? "opacity-100" : "opacity-50"} flex items-center`}>
+                                    <div className="relative w-[20px] h-[20px] mr-[4px]">
+                                        <Image src="/Get Started Icon.png" alt="Get Started" layout="responsive" width={0} height={0} />
+                                    </div>
+                                    <h3 className="text-[15px] font-light">Get Started</h3>
                                 </div>
-                                <h3 className="text-[15px] font-light">Get Started</h3>
+                                <div className="PopupAttentionGradient PopupAttentionShadow rounded-[7px]">
+                                    <h3 className="mx-[8px] my-[4px] text-[11px] tracking-[0.1px]">Incomplete</h3>
+                                </div>
                             </div>
-                            <div className="PopupAttentionGradient PopupAttentionShadow rounded-[7px]">
-                                <h3 className="mx-[8px] my-[4px] text-[11px] tracking-[0.1px]">Incomplete</h3>
-                            </div>
-                        </div>
-                    </Link>
+                        </Link>
+                    )}
 
                     <div className="opacity-60 tracking-[1px] font-extralight text-[12px] mb-[10px]">MENU</div>
                     <div className="flex flex-col gap-[6px]">
@@ -115,16 +142,16 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
                     </div>
                 </div>
 
-                <Link href="/dashboard/" onClick={() => setIsOpen(false)}
+                <Link href="/dashboard/profile" onClick={() => setIsOpen(false)}
                     className="rounded-[10px] flex items-center BlackWithLightGradient ContentCardShadow">
                     <div className="flex w-full items-center justify-between mx-[20px] my-[14px]">
                         <div className="flex items-center gap-[12px]">
                             <div className="relative w-[35px] rounded-full overflow-hidden flex-shrink-0">
-                                <Image src="/Admin PFP.png" alt="Admin Profile" layout="responsive" width={0} height={0} />
+                                <Image src={userData.selectedAvatar ? `/${userData.selectedAvatar}` : "/Lucidify Umbrella.png"} alt="Admin Profile" layout="responsive" width={0} height={0} />
                             </div>
                             <div className="flex flex-col gap-[2px]">
-                                <div className="text-[14px]">Moopy</div>
-                                <div className="text-[#ffffff66] text-[12px]">Lucidify</div>
+                                <div className="text-[14px]">{userData.firstName || 'Admin'} {userData.lastName || ''}</div>
+                                <div className="text-[#ffffff66] text-[12px]">Lucidify Admin</div>
                             </div>
                         </div>
                         <div className="relative w-[12px]">
@@ -143,20 +170,22 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
                         </Link>
 
                         <div className="flex flex-col mt-[165px] w-full">
-                            <Link href="/dashboard/get-started"
-                                className={`${highlight === "getStarted" ? "BlackWithLightGradient ContentCardShadow" : ""} flex items-center rounded-[10px]`}>
-                                <div className="flex mx-[10px] my-[7px] items-center justify-between w-full">
-                                    <div className={`${highlight === "getStarted" ? "opacity-100" : "opacity-50"} flex items-center`}>
-                                        <div className="relative w-[20px] h-[20px] mr-[4px]">
-                                            <Image src="/Get Started Icon.png" alt="Get Started Icon" layout="responsive" width={0} height={0} />
+                            {!userData.setupComplete && (
+                                <Link href="/dashboard/get-started"
+                                    className={`${highlight === "getStarted" ? "BlackWithLightGradient ContentCardShadow" : ""} flex items-center rounded-[10px]`}>
+                                    <div className="flex mx-[10px] my-[7px] items-center justify-between w-full">
+                                        <div className={`${highlight === "getStarted" ? "opacity-100" : "opacity-50"} flex items-center`}>
+                                            <div className="relative w-[20px] h-[20px] mr-[4px]">
+                                                <Image src="/Get Started Icon.png" alt="Get Started Icon" layout="responsive" width={0} height={0} />
+                                            </div>
+                                            <h3 className="text-[15px] font-light">Get Started</h3>
                                         </div>
-                                        <h3 className="text-[15px] font-light">Get Started</h3>
+                                        <div className="PopupAttentionGradient PopupAttentionShadow rounded-[7px]">
+                                            <h3 className="mx-[8px] my-[4px] text-[11px] tracking-[0.1px]">Incomplete</h3>
+                                        </div>
                                     </div>
-                                    <div className="PopupAttentionGradient PopupAttentionShadow rounded-[7px]">
-                                        <h3 className="mx-[8px] my-[4px] text-[11px] tracking-[0.1px]">Incomplete</h3>
-                                    </div>
-                                </div>
-                            </Link>
+                                </Link>
+                            )}
 
                             <div className="flex items-center rounded-[10px] mt-[45px] mb-[45px] SearchBackground ContentCardShadow">
                                 <div className="flex mx-[20px] my-[9px] items-center">
@@ -193,16 +222,18 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
                         </div>
                     </div>
 
-                    <Link href="/dashboard/"
-                        className="rounded-[10px] flex items-center justify-around relative bg-white w-full BlackWithLightGradient ContentCardShadow">
+                    <Link href="/dashboard/profile"
+                        className="rounded-[10px] flex items-center justify-around relative w-full BlackWithLightGradient ContentCardShadow">
                         <div className="flex w-full items-center justify-between relative mx-[20px] my-[14px]">
                             <div className="flex items-center gap-2.5 relative">
                                 <div className="relative w-[35px] rounded-full overflow-hidden">
-                                    <Image src="/Admin PFP.png" alt="User Profile" layout="responsive" width={0} height={0} />
+                                    <Image
+                                        src={userData.selectedAvatar ? `/${userData.selectedAvatar}` : "/Lucidify Umbrella.png"}
+                                        alt="Admin Profile" layout="responsive" width={0} height={0} />
                                 </div>
                                 <div className="flex flex-col gap-[2px]">
-                                    <div className="text-[14px]">Moopy</div>
-                                    <div className="text-[#ffffff66] text-[12px]">Lucidify</div>
+                                    <div className="text-[14px]">{userData.firstName || 'Admin'} {userData.lastName || ''}</div>
+                                    <div className="text-[#ffffff66] text-[12px]">Lucidify Admin</div>
                                 </div>
                             </div>
                             <div className="relative w-[12px]">

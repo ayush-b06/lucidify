@@ -6,6 +6,7 @@ import { db } from '../firebaseConfig';
 import Link from 'next/link';
 import Image from 'next/image';
 import DashboardClientSideNav from '@/components/DashboardClientSideNav';
+import NotificationBell from '@/components/NotificationBell';
 
 interface DASHBOARDClientProjectDetailsUploadsProps {
     userId: string;
@@ -122,14 +123,7 @@ const DASHBOARDClientProjectDetailsUploads = ({ userId, projectId }: DASHBOARDCl
                             <div className="font-light text-sm truncate max-w-[140px] sm:max-w-none">/ {projectName}</div>
                         </div>
                         <div className="inline-flex items-center gap-3">
-                            <div className="flex w-[45px] h-[45px] sm:w-[55px] sm:h-[55px] items-center justify-center relative rounded-[100px] BlackGradient ContentCardShadow hover:cursor-pointer">
-                                <div className="flex w-5 h-5 items-center justify-center px-[3px] absolute -top-[5px] -left-[4px] bg-[#6265f0] rounded-md">
-                                    <div className="font-normal text-xs">2</div>
-                                </div>
-                                <div className="w-[22px] sm:w-[25px]">
-                                    <Image src="/Notification Bell Icon.png" alt="Bell" layout="responsive" width={0} height={0} />
-                                </div>
-                            </div>
+                            <NotificationBell />
                             <Link href="/dashboard/settings" className="hidden sm:flex w-[129px] h-[55px] items-center justify-center gap-2.5 rounded-[15px] BlackGradient ContentCardShadow">
                                 <div className="font-light text-sm">Settings</div>
                                 <div className="w-[30px]">
