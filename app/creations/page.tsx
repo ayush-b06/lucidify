@@ -1,3 +1,4 @@
+import CaseStudySection from "@/components/CaseStudySection";
 import CREATIONSAllCaseStudiesSection from "@/components/CREATIONSAllCaseStudiesSection";
 import CREATIONSHeroSection from "@/components/CREATIONSHeroSection";
 import Footer from "@/components/Footer";
@@ -11,7 +12,7 @@ export default function CreationsPage() {
             <Navbar />
             <Main>
                 <CREATIONSHeroSection />
-                <CREATIONSAllCaseStudiesSection />
+                <CaseStudySection />
                 <div className="mt-[200px]" />
                 <GetStartedSection />
             </Main>

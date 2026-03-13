@@ -148,7 +148,7 @@ const FeaturesSection = () => {
 
     return (
         <section className="items-center">
-            <div className="relative mt-[120px] w-full max-w-[1080px] mx-auto px-[32px] sm:px-[48px]">
+            <div className="relative my-[150px] w-full max-w-[1080px] mx-auto px-[32px] sm:px-[48px]">
 
                 {/* Top label */}
                 <div className="flex items-center justify-between mb-[36px]">
