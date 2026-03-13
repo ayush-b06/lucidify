@@ -1,6 +1,8 @@
+"use client"
+
 import Image from 'next/image'
 import Link from 'next/link'
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
 const features = [
     {
@@ -21,13 +23,49 @@ const features = [
 ];
 
 const FeaturesSection = () => {
+    const gridRef = useRef<HTMLDivElement>(null);
+    const headingRef = useRef<HTMLDivElement>(null);
+    const [cardsVisible, setCardsVisible] = useState(false);
+    const [headingVisible, setHeadingVisible] = useState(false);
+
+    useEffect(() => {
+        const headingObserver = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    setHeadingVisible(true);
+                    headingObserver.disconnect();
+                }
+            },
+            { threshold: 0.3 }
+        );
+        const cardsObserver = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    setCardsVisible(true);
+                    cardsObserver.disconnect();
+                }
+            },
+            { threshold: 0.15 }
+        );
+        if (headingRef.current) headingObserver.observe(headingRef.current);
+        if (gridRef.current) cardsObserver.observe(gridRef.current);
+        return () => {
+            headingObserver.disconnect();
+            cardsObserver.disconnect();
+        };
+    }, []);
+
     return (
         <section className="items-center">
             <div className="my-[200px]">
                 <div className="flex flex-col items-center">
                     <div className="UmbrellaBackgroundGradient 2xl:min-w-[75%] xl:min-w-[85%] lg:min-w-[90%] min-w-[100%] rounded-t-[100%] sm:h-[900px] h-[400px] absolute -z-10" />
 
-                    <div className="flex flex-col items-center sm:mt-[200px] mt-[100px] sm:max-w-[100%] max-w-[80%]">
+                    {/* Heading */}
+                    <div
+                        ref={headingRef}
+                        className={`flex flex-col items-center sm:mt-[200px] mt-[100px] sm:max-w-[100%] max-w-[80%] ScrollReveal ${headingVisible ? 'is-visible' : ''}`}
+                    >
                         <h1 className="HeadingFont sm:text-start text-center">
                             Why businesses choose <span className="TextGradient">Lucidify</span>.
                         </h1>
@@ -36,11 +74,15 @@ const FeaturesSection = () => {
                         </h3>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-[20px] sm:mt-[100px] mt-[50px] px-[20px] sm:px-0 max-w-[900px] w-full">
-                        {features.map((f) => (
+                    {/* Cards */}
+                    <div
+                        ref={gridRef}
+                        className="grid grid-cols-1 sm:grid-cols-3 gap-[20px] sm:mt-[100px] mt-[50px] px-[20px] sm:px-0 max-w-[900px] w-full"
+                    >
+                        {features.map((f, i) => (
                             <div
                                 key={f.title}
-                                className="BlackGradient ContentCardShadow rounded-[20px] flex flex-col px-[40px] py-[45px] hover:-translate-y-[6px] hover:shadow-[0_20px_60px_rgba(114,92,247,0.12)] cursor-default"
+                                className={`FeatureCard BlackGradient ContentCardShadow rounded-[20px] flex flex-col px-[40px] py-[45px] hover:-translate-y-[6px] cursor-default ScrollReveal ${cardsVisible ? 'is-visible' : ''} Delay${i + 1}`}
                             >
                                 <div className="flex mb-[30px]">
                                     <div className="bg-[#232426] rounded-[10px]">

@@ -31,14 +31,13 @@ const ProjectPage = () => {
     }
   }, [user, loading, router]);
 
-  // Ensure userId and projectId exist before rendering the component
-  if (!userId || !projectId) {
-    return <div>Missing user or project information.</div>;
+  if (loading || !user) {
+    return null;
   }
 
-
-  if (!user) {
-    return null;  // Prevent rendering until user is confirmed
+  // Ensure userId and projectId exist before rendering the component
+  if (!userId || !projectId) {
+    return null;
   }
 
   // Render correct dashboard

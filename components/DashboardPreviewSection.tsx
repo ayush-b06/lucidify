@@ -1,5 +1,8 @@
+"use client"
+
 import Image from 'next/image';
 import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
 
 const pills = [
     { icon: '📊', label: 'Progress Tracking' },
@@ -21,8 +24,44 @@ const mockProjects = [
 ];
 
 const DashboardPreviewSection = () => {
+    const sectionRef = useRef<HTMLDivElement>(null);
+    const mockupRef = useRef<HTMLDivElement>(null);
+    const [progressVisible, setProgressVisible] = useState(false);
+    const [tilt, setTilt] = useState({ x: 0, y: 0 });
+    const [isHovering, setIsHovering] = useState(false);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    setProgressVisible(true);
+                    observer.disconnect();
+                }
+            },
+            { threshold: 0.25 }
+        );
+        if (sectionRef.current) observer.observe(sectionRef.current);
+        return () => observer.disconnect();
+    }, []);
+
+    const handleMockupMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        const rect = mockupRef.current!.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const dx = (e.clientX - cx) / (rect.width / 2);
+        const dy = (e.clientY - cy) / (rect.height / 2);
+        setTilt({ x: dy * -5, y: dx * 5 });
+    };
+
+    const handleMockupMouseLeave = () => {
+        setIsHovering(false);
+        setTilt({ x: 0, y: 0 });
+    };
+
+    const handleMockupMouseEnter = () => setIsHovering(true);
+
     return (
-        <section className="items-center">
+        <section className="items-center" ref={sectionRef}>
             <div className="flex flex-col items-center mx-auto py-[80px] sm:py-[120px] px-[20px] sm:px-[40px] max-w-[1100px]">
 
                 {/* Label pill */}
@@ -49,9 +88,18 @@ const DashboardPreviewSection = () => {
                     ))}
                 </div>
 
-                {/* Dashboard mockup */}
-                <div className="FadeInUp4 w-full max-w-[900px] rounded-[20px] overflow-hidden border border-[#222] DashboardPreviewGlow">
-
+                {/* Dashboard mockup — 3D tilt wrapper */}
+                <div
+                    ref={mockupRef}
+                    onMouseMove={handleMockupMouseMove}
+                    onMouseLeave={handleMockupMouseLeave}
+                    onMouseEnter={handleMockupMouseEnter}
+                    className="FadeInUp4 w-full max-w-[900px] rounded-[20px] overflow-hidden border border-[#222] DashboardPreviewGlow"
+                    style={{
+                        transform: `perspective(1200px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+                        transition: isHovering ? 'transform 0.12s ease-out' : 'transform 0.5s ease-out',
+                    }}
+                >
                     {/* Browser chrome */}
                     <div className="bg-[#0D0D0D] border-b border-[#1C1C1C] px-[16px] py-[11px] flex items-center gap-[8px]">
                         <div className="w-[10px] h-[10px] rounded-full bg-[#FF5F57] flex-shrink-0" />
@@ -67,18 +115,16 @@ const DashboardPreviewSection = () => {
                     {/* Dashboard interior */}
                     <div className="DashboardBackgroundGradient flex" style={{ height: '420px' }}>
 
-                        {/* Sidebar */}
+                        {/* Sidebar icon-only */}
                         <div
                             className="flex-shrink-0 border-r border-white/5 py-[20px] flex flex-col"
                             style={{ width: '60px' }}
                         >
-                            {/* Logo area */}
                             <div className="px-[14px] mb-[28px]">
                                 <div className="w-[28px] opacity-60">
                                     <Image src="/Lucidify Umbrella.png" alt="Lucidify" layout="responsive" width={0} height={0} />
                                 </div>
                             </div>
-                            {/* Nav items */}
                             <div className="flex flex-col gap-[4px] px-[10px]">
                                 {navItems.map(item => (
                                     <div
@@ -93,7 +139,7 @@ const DashboardPreviewSection = () => {
                             </div>
                         </div>
 
-                        {/* Wider sidebar for sm+ */}
+                        {/* Wider sidebar sm+ */}
                         <div className="hidden sm:flex flex-col flex-shrink-0 border-r border-white/5 py-[20px] px-[20px]" style={{ width: '165px' }}>
                             <div className="w-[100px] opacity-70 mb-[40px]">
                                 <Image src="/Lucidify white logo.png" alt="Lucidify" layout="responsive" width={0} height={0} />
@@ -119,8 +165,9 @@ const DashboardPreviewSection = () => {
                             <div className="flex items-center justify-between mb-[20px] sm:mb-[26px]">
                                 <span className="text-[13px] font-semibold opacity-50">Dashboard</span>
                                 <div className="flex items-center gap-[10px]">
-                                    <div className="w-[20px] h-[20px] rounded-full bg-[#6265F0] flex items-center justify-center">
-                                        <span className="text-[9px] font-medium">3</span>
+                                    {/* Notification badge with ping */}
+                                    <div className="NotifPing w-[20px] h-[20px] rounded-full bg-[#6265F0] flex items-center justify-center">
+                                        <span className="text-[9px] font-medium relative z-10">3</span>
                                     </div>
                                     <div className="hidden sm:flex w-[80px] h-[30px] BlackGradient ContentCardShadow rounded-[8px] items-center justify-center gap-[5px]">
                                         <span className="text-[10px] font-light opacity-60">Settings</span>
@@ -134,13 +181,21 @@ const DashboardPreviewSection = () => {
                                 <p className="text-[11px] opacity-35 font-light mt-[3px]">Here&apos;s what&apos;s happening with your projects.</p>
                             </div>
 
-                            {/* Project cards */}
+                            {/* Project cards with animated progress bars */}
                             <div className="flex gap-[10px] sm:gap-[14px] flex-wrap mb-[18px]">
-                                {mockProjects.map(p => (
+                                {mockProjects.map((p, i) => (
                                     <div key={p.name} className="BlackGradient ContentCardShadow rounded-[14px] px-[14px] sm:px-[18px] py-[12px] sm:py-[14px] flex-1 min-w-[120px]">
                                         <p className="text-[11px] sm:text-[13px] font-semibold mb-[8px] truncate">{p.name}</p>
                                         <div className="w-full h-[4px] bg-white/10 rounded-full mb-[6px]">
-                                            <div className="h-full rounded-full transition-all" style={{ width: `${p.progress}%`, backgroundColor: p.color }} />
+                                            <div
+                                                className="h-full rounded-full"
+                                                style={{
+                                                    width: progressVisible ? `${p.progress}%` : '0%',
+                                                    backgroundColor: p.color,
+                                                    transition: 'width 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                    transitionDelay: progressVisible ? `${0.3 + i * 0.15}s` : '0s',
+                                                }}
+                                            />
                                         </div>
                                         <div className="flex items-center justify-between">
                                             <span className="text-[10px] opacity-35 font-light">{p.statusLabel}</span>

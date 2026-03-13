@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import NavStartAProjectButton from './NavStartAProjectButton';
 import Popup from './Popup'; // Import the Popup component
 import SignUpButton from './SignUpButton';
@@ -16,6 +16,19 @@ const navLinks = [
 const Navbar = () => {
     const [isPopupOpen, setIsPopupOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [scrollProgress, setScrollProgress] = useState(0);
+    const [isScrolled, setIsScrolled] = useState(false);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            setScrollProgress(docHeight > 0 ? (scrollTop / docHeight) * 100 : 0);
+            setIsScrolled(scrollTop > 20);
+        };
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
 
     const togglePopup = () => {
         setIsPopupOpen(!isPopupOpen);
@@ -30,7 +43,10 @@ const Navbar = () => {
     };
 
     return (
-        <header className="relative z-50">
+        <header className={`sticky top-0 z-50 ${isScrolled ? 'NavbarScrolled' : ''}`}>
+            {/* Scroll progress bar */}
+            <div className="ScrollProgressBar" style={{ width: `${scrollProgress}%` }} />
+
             <Popup closePopup={togglePopup} isVisible={isPopupOpen} />
 
             {/* Desktop Navigation */}

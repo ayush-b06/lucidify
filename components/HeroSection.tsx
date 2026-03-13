@@ -1,6 +1,8 @@
+"use client"
+
 import Image from 'next/image'
 import Link from 'next/link'
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import LogInButton from './LogInButton'
 import { Poppins } from 'next/font/google'
 
@@ -10,17 +12,57 @@ const poppins = Poppins({
 });
 
 const stats = [
-  { value: '2+', label: 'Projects Delivered' },
+  { value: '15+', label: 'Projects Delivered' },
   { value: 'Free', label: 'Hosting Included' },
   { value: '100%', label: 'Client Satisfaction' },
 ];
 
 const HeroSection = () => {
+  const orb1Ref = useRef<HTMLDivElement>(null);
+  const orb2Ref = useRef<HTMLDivElement>(null);
+  const orb3Ref = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const x = (e.clientX / window.innerWidth - 0.5) * 2;
+      const y = (e.clientY / window.innerHeight - 0.5) * 2;
+
+      if (orb1Ref.current)
+        orb1Ref.current.style.transform = `translate(${x * -20}px, ${y * -16}px)`;
+      if (orb2Ref.current)
+        orb2Ref.current.style.transform = `translate(${x * 14}px, ${y * 10}px)`;
+      if (orb3Ref.current)
+        orb3Ref.current.style.transform = `translate(${x * -8}px, ${y * 18}px)`;
+      if (contentRef.current)
+        contentRef.current.style.transform = `translate(${x * 5}px, ${y * 3}px)`;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
   return (
     <section className={`${poppins.className} items-center`}>
-      <div className="flex justify-center rounded-[50px] mx-auto BackgroundGradient">
-        <div className="flex items-center w-full flex-col mt-[125px] sm:mb-[150px] mb-[125px] 2xl:mt-[125px] 2xl:mb-[150px] xl:mt-[80px] xl:mb-[125px] lg:mt-[70px] lg:mb-[100px] max-w-[650px]">
+      <div className="flex justify-center rounded-[50px] mx-auto BackgroundGradient relative overflow-hidden">
 
+        {/* Floating orbs — outer div handles JS translate, inner handles CSS pulse */}
+        <div ref={orb1Ref} className="absolute pointer-events-none" style={{ top: '-120px', left: '-180px', width: '500px', height: '500px' }}>
+          <div className="HeroOrbInner" style={{ background: 'radial-gradient(circle, rgba(82,64,201,0.5) 0%, transparent 65%)', animationDelay: '0s' }} />
+        </div>
+        <div ref={orb2Ref} className="absolute pointer-events-none" style={{ top: '40px', right: '-140px', width: '380px', height: '380px' }}>
+          <div className="HeroOrbInner" style={{ background: 'radial-gradient(circle, rgba(114,92,247,0.4) 0%, transparent 65%)', animationDelay: '-2s' }} />
+        </div>
+        <div ref={orb3Ref} className="absolute pointer-events-none" style={{ bottom: '-60px', left: '28%', width: '260px', height: '260px' }}>
+          <div className="HeroOrbInner" style={{ background: 'radial-gradient(circle, rgba(153,139,249,0.35) 0%, transparent 65%)', animationDelay: '-4s' }} />
+        </div>
+
+        {/* Content */}
+        <div
+          ref={contentRef}
+          className="flex items-center w-full flex-col mt-[125px] sm:mb-[150px] mb-[125px] 2xl:mt-[125px] 2xl:mb-[150px] xl:mt-[80px] xl:mb-[125px] lg:mt-[70px] lg:mb-[100px] max-w-[650px]"
+          style={{ transition: 'transform 0.1s linear' }}
+        >
           {/* Badge */}
           <div className="FadeInUp flex justify-center items-center border-solid border border-1 border-[#2F2F2F] rounded-full">
             <div className="flex items-center my-1.5 mx-5">
