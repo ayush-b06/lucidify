@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { useTheme } from '@/context/themeContext';
 
 const pills = [
     { icon: '📊', label: 'Progress Tracking' },
@@ -24,6 +25,8 @@ const mockProjects = [
 ];
 
 const DashboardPreviewSection = () => {
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
     const sectionRef = useRef<HTMLDivElement>(null);
     const mockupRef = useRef<HTMLDivElement>(null);
     const [progressVisible, setProgressVisible] = useState(false);
@@ -101,13 +104,27 @@ const DashboardPreviewSection = () => {
                     }}
                 >
                     {/* Browser chrome */}
-                    <div className="bg-[#F0F0F0] border-b border-[#DCDCDC] px-[16px] py-[11px] flex items-center gap-[8px]">
+                    <div
+                        className="px-[16px] py-[11px] flex items-center gap-[8px]"
+                        style={{
+                            background: isDark ? '#0D0D0D' : '#F0F0F0',
+                            borderBottom: isDark ? '1px solid #1C1C1C' : '1px solid #DCDCDC',
+                        }}
+                    >
                         <div className="w-[10px] h-[10px] rounded-full bg-[#FF5F57] flex-shrink-0" />
                         <div className="w-[10px] h-[10px] rounded-full bg-[#FEBC2E] flex-shrink-0" />
                         <div className="w-[10px] h-[10px] rounded-full bg-[#28C840] flex-shrink-0" />
                         <div className="flex-1 mx-[12px]">
-                            <div className="bg-white rounded-[6px] px-[12px] py-[5px] max-w-[280px] mx-auto border border-[#E0E0E0]">
-                                <span className="text-[11px] font-light" style={{ color: 'rgba(0,0,0,0.35)' }}>lucidify.vercel.app/dashboard</span>
+                            <div
+                                className="rounded-[6px] px-[12px] py-[5px] max-w-[280px] mx-auto"
+                                style={{
+                                    background: isDark ? '#1A1A1A' : '#ffffff',
+                                    border: isDark ? 'none' : '1px solid #E0E0E0',
+                                }}
+                            >
+                                <span className="text-[11px] font-light" style={{ color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.35)' }}>
+                                    lucidify.vercel.app/dashboard
+                                </span>
                             </div>
                         </div>
                     </div>
