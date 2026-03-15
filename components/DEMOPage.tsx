@@ -152,10 +152,10 @@ const DEMOPage = () => {
             <Popup closePopup={() => setIsPopupOpen(false)} isVisible={isPopupOpen} />
 
             {/* ── Hero ─────────────────────────────────────────────────────── */}
-            <section>
+            <section className="mt-[86px] sm:mt-[90px]">
                 <div
                     ref={heroRef}
-                    className="BackgroundGradient relative overflow-hidden rounded-[50px] mt-[100px] sm:mt-[120px] mx-[12px] sm:mx-[24px]"
+                    className="BackgroundGradient relative overflow-hidden rounded-[50px] mx-[12px] sm:mx-[24px]"
                 >
                     {/* Mouse glow */}
                     <div
@@ -193,10 +193,10 @@ const DEMOPage = () => {
                         </div>
 
                         <h1 className="HeadingFont mb-[18px]">
-                            Your project, <span className="TextGradient">always in sight</span>.
+                            Built for <span className="TextGradient">full transparency</span>.
                         </h1>
                         <p className="TextFont max-w-[520px] mb-[44px]">
-                            Every Lucidify client gets a private dashboard — track progress in real time, review designs, message your team, and manage payments. All in one place.
+                            No more waiting on emails or wondering what stage your project is at. Your private dashboard gives you a live window into everything — designs, progress, payments, and your team.
                         </p>
 
                         <div className="flex flex-wrap gap-[14px] justify-center">
@@ -383,61 +383,63 @@ const DEMOPage = () => {
             </section>
 
             {/* ── Final CTA ─────────────────────────────────────────────────── */}
-            <section className="items-center">
-                <div className="BackgroundGradient relative overflow-hidden rounded-[50px] mt-[0px] mb-[80px] sm:mb-[120px] mx-[12px] sm:mx-[24px]">
+            <section>
+                <div className="max-w-[1080px] mx-auto px-[24px] sm:px-[48px] pb-[120px] sm:pb-[160px]">
+                    <div
+                        className="relative rounded-[32px] overflow-hidden flex flex-col lg:flex-row items-center justify-between gap-[48px] px-[40px] sm:px-[64px] py-[56px] sm:py-[72px]"
+                        style={{
+                            background: 'radial-gradient(ellipse 80% 110% at 50% -10%, #251470 0%, #3e28a8 40%, #5c3ecc 70%, #7255e0 100%)',
+                            boxShadow: '0 32px 80px rgba(82,56,200,0.35)',
+                            border: '1px solid rgba(255,255,255,0.10)',
+                        }}
+                    >
+                        {/* Subtle inner glow */}
+                        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse 60% 50% at 50% 0%, rgba(255,255,255,0.07) 0%, transparent 70%)' }} />
 
-                    {/* Particles */}
-                    {particles.slice(0, 8).map((p, i) => (
-                        <div
-                            key={i}
-                            className="absolute pointer-events-none rounded-full HeroParticle"
-                            style={{
-                                left: p.left, top: p.top,
-                                width: `${p.size}px`, height: `${p.size}px`,
-                                background: 'rgba(255,255,255,0.25)',
-                                animationDelay: p.delay, animationDuration: p.duration, zIndex: 0,
-                            }}
-                        />
-                    ))}
+                        {/* Floating dots */}
+                        {[
+                            { top: '18%', left: '6%' }, { top: '72%', left: '12%' },
+                            { top: '30%', right: '8%' }, { top: '65%', right: '14%' },
+                        ].map((pos, i) => (
+                            <div key={i} className="absolute w-[5px] h-[5px] rounded-full pointer-events-none" style={{ ...pos, background: 'rgba(255,255,255,0.18)' }} />
+                        ))}
 
-                    <div className="relative z-10 flex flex-col items-center text-center max-w-[600px] mx-auto px-[24px] sm:px-[48px] py-[90px] sm:py-[120px]">
-                        <div className="flex justify-center items-center rounded-full bg-white shadow-sm shadow-neutral-900 mb-[28px]">
-                            <div className="flex items-center mx-[14px] sm:mx-[16px] my-[6px] sm:my-[8px] gap-[8px]">
-                                <div className="w-[12px] sm:w-[14px]">
-                                    <Image src="/Lucidify Umbrella and L (black gradient).png" alt="Lucidify" layout="responsive" width={0} height={0} />
-                                </div>
-                                <span className="tracking-[4px] font-semibold text-[12px] sm:text-[14px] text-black">GET STARTED</span>
-                            </div>
+                        {/* Left: text */}
+                        <div className="relative z-10 flex-1 min-w-0">
+                            <p className="text-[11px] tracking-[3px] font-medium mb-[14px]" style={{ color: 'rgba(255,255,255,0.5)' }}>GET STARTED TODAY</p>
+                            <h2 className="HeadingFont mb-[14px]" style={{ color: '#ffffff' }}>
+                                Start your project.<br />Get your dashboard.
+                            </h2>
+                            <p className="text-[14px] font-light leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                                Every project comes with a dedicated dashboard — no extra setup, no extra cost.
+                            </p>
                         </div>
 
-                        <h1 className="HeadingFont mb-[16px]">
-                            Ready to see it <span className="TextGradient">for yourself?</span>
-                        </h1>
-                        <p className="TextFont mb-[44px] max-w-[440px]">
-                            Start your project today and get instant access to your private client dashboard.
-                        </p>
-
-                        <div className="flex flex-wrap gap-[14px] justify-center">
+                        {/* Right: CTAs */}
+                        <div className="relative z-10 flex flex-col sm:flex-row lg:flex-col gap-[12px] flex-shrink-0">
                             <button
                                 onClick={() => setIsPopupOpen(true)}
-                                className="flex items-center gap-[8px] px-[24px] py-[12px] rounded-full font-medium text-[15px] transition-all hover:opacity-90 active:scale-[0.97] bg-white text-black ThreeD"
-                                style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}
+                                className="flex items-center justify-center gap-[8px] px-[28px] py-[14px] rounded-[14px] font-semibold text-[15px] transition-all hover:opacity-90 active:scale-[0.97]"
+                                style={{
+                                    background: '#ffffff',
+                                    color: '#1a0a4a',
+                                    boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+                                    minWidth: '200px',
+                                }}
                             >
-                                Start a project
-                                <div className="w-[11px]">
-                                    <Image src="/Black Right Arrow.png" alt="→" layout="responsive" width={0} height={0} />
-                                </div>
+                                ✦ Start a project
                             </button>
                             <Link
                                 href="/login"
-                                className="flex items-center gap-[8px] px-[24px] py-[12px] rounded-full font-medium text-[15px] transition-all hover:opacity-80"
+                                className="flex items-center justify-center gap-[8px] px-[28px] py-[14px] rounded-[14px] font-medium text-[15px] transition-all hover:opacity-80"
                                 style={{
-                                    background: 'rgba(255,255,255,0.08)',
-                                    border: '1px solid rgba(255,255,255,0.14)',
+                                    background: 'rgba(255,255,255,0.10)',
+                                    border: '1px solid rgba(255,255,255,0.18)',
                                     color: '#ffffff',
+                                    minWidth: '200px',
                                 }}
                             >
-                                Log in
+                                Access my dashboard →
                             </Link>
                         </div>
                     </div>
