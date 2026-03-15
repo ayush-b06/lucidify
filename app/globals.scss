@@ -1046,6 +1046,13 @@ svg {
   color: #111111;
 }
 
+/* Shrink longer nav labels at lg breakpoint (1024px–1299px) where space is tighter */
+@media (min-width: 1024px) and (max-width: 1299px) {
+  .NavLinkText.button__text {
+    font-size: 11px !important;
+  }
+}
+
 /* Light mode (dark pill) — greatly reduce outward white shadow on nav buttons */
 [data-theme="light"] .NavLinkButton.button {
   box-shadow: 0px 3px 6px #a5b4fc22 !important;
