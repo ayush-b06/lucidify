@@ -12,11 +12,17 @@ const pills = [
     { icon: '💳', label: 'Payment Plans' },
 ];
 
-const navItems = [
+const navItemsDark = [
     { icon: '/Dashboard Icon.png', label: 'Dashboard', active: true },
     { icon: '/Projects Icon.png', label: 'Projects', active: false },
     { icon: '/Messages Icon.png', label: 'Messages', active: false },
     { icon: '/Transactions Icon.png', label: 'Transactions', active: false },
+];
+const navItemsLight = [
+    { icon: '/Black Dashboard Icon.png', label: 'Dashboard', active: true },
+    { icon: '/Black Projects Icon.png', label: 'Projects', active: false },
+    { icon: '/Black Messages Icon.png', label: 'Messages', active: false },
+    { icon: '/Black Transactions Icon.png', label: 'Transactions', active: false },
 ];
 
 const mockProjects = [
@@ -105,7 +111,7 @@ const DashboardPreviewSection = () => {
                 >
                     {/* Browser chrome */}
                     <div
-                        className="px-[16px] py-[11px] flex items-center gap-[8px]"
+                        className="px-[16px] py-[7px] flex items-center gap-[8px]"
                         style={{
                             background: isDark ? '#0D0D0D' : '#F0F0F0',
                             borderBottom: isDark ? '1px solid #1C1C1C' : '1px solid #DCDCDC',
@@ -157,20 +163,27 @@ const DashboardPreviewSection = () => {
                         </div> */}
 
                         {/* Wider sidebar sm+ */}
-                        <div className="hidden sm:flex flex-col flex-shrink-0 border-r border-white/5 py-[20px] px-[20px]" style={{ width: '165px' }}>
-                            <div className="w-[100px] opacity-70 mb-[40px]">
-                                <Image src="/Lucidify white logo.png" alt="Lucidify" layout="responsive" width={0} height={0} />
+                        <div
+                            className="hidden sm:flex flex-col flex-shrink-0 py-[20px] px-[20px]"
+                            style={{ width: '165px', borderRight: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(0,0,0,0.07)' }}
+                        >
+                            <div className="w-[100px] mb-[40px]" style={{ opacity: isDark ? 0.7 : 1 }}>
+                                <Image src={isDark ? '/Lucidify white logo.png' : '/Lucidify black logo.png'} alt="Lucidify" layout="responsive" width={0} height={0} />
                             </div>
                             <div className="flex flex-col gap-[6px]">
-                                {navItems.map(item => (
+                                {(isDark ? navItemsDark : navItemsLight).map(item => (
                                     <div
                                         key={item.label}
-                                        className={`flex items-center gap-[10px] px-[10px] py-[7px] rounded-[9px] ${item.active ? 'BlackWithLightGradient SpecialContentCardShadow' : ''}`}
+                                        className={`flex items-center gap-[10px] px-[10px] py-[7px] rounded-[9px] ${item.active ? (isDark ? 'BlackWithLightGradient SpecialContentCardShadow' : '') : ''}`}
+                                        style={item.active && !isDark ? { background: 'rgba(0,0,0,0.07)' } : {}}
                                     >
                                         <div className={`w-[14px] h-[14px] flex-shrink-0 ${item.active ? '' : 'opacity-35'}`}>
                                             <Image src={item.icon} alt={item.label} layout="responsive" width={0} height={0} />
                                         </div>
-                                        <span className={`text-[12px] font-light ${item.active ? 'opacity-100' : 'opacity-35'}`}>{item.label}</span>
+                                        <span
+                                            className={`text-[12px] font-light ${item.active ? 'opacity-100' : 'opacity-35'}`}
+                                            style={{ color: isDark ? '#ffffff' : '#111111' }}
+                                        >{item.label}</span>
                                     </div>
                                 ))}
                             </div>
@@ -180,14 +193,20 @@ const DashboardPreviewSection = () => {
                         <div className="flex-1 px-[16px] sm:px-[28px] py-[20px] overflow-hidden">
                             {/* Top bar */}
                             <div className="flex items-center justify-between mb-[20px] sm:mb-[26px]">
-                                <span className="text-[13px] font-semibold opacity-50">Dashboard</span>
+                                <span className="text-[13px] font-semibold opacity-50" style={{ color: isDark ? '#ffffff' : '#111111' }}>Dashboard</span>
                                 <div className="flex items-center gap-[10px]">
                                     {/* Notification badge with ping */}
                                     <div className="NotifPing w-[20px] h-[20px] rounded-full bg-[#6265F0] flex items-center justify-center">
                                         <span className="text-[9px] font-medium relative z-10">3</span>
                                     </div>
-                                    <div className="hidden sm:flex w-[80px] h-[30px] BlackGradient ContentCardShadow rounded-[8px] items-center justify-center gap-[5px]">
-                                        <span className="text-[10px] font-light opacity-60">Settings</span>
+                                    <div
+                                        className="hidden sm:flex w-[80px] h-[30px] rounded-[8px] items-center justify-center gap-[5px]"
+                                        style={isDark
+                                            ? { background: 'var(--black-gradient, #1a1a1a)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }
+                                            : { background: '#111111' }
+                                        }
+                                    >
+                                        <span className="text-[10px] font-light text-white" style={{ opacity: isDark ? 0.6 : 0.85 }}>Settings</span>
                                     </div>
                                 </div>
                             </div>
