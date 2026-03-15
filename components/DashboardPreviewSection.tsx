@@ -101,13 +101,13 @@ const DashboardPreviewSection = () => {
                     }}
                 >
                     {/* Browser chrome */}
-                    <div className="bg-[#0D0D0D] border-b border-[#1C1C1C] px-[16px] py-[11px] flex items-center gap-[8px]">
+                    <div className="bg-[#F0F0F0] border-b border-[#DCDCDC] px-[16px] py-[11px] flex items-center gap-[8px]">
                         <div className="w-[10px] h-[10px] rounded-full bg-[#FF5F57] flex-shrink-0" />
                         <div className="w-[10px] h-[10px] rounded-full bg-[#FEBC2E] flex-shrink-0" />
                         <div className="w-[10px] h-[10px] rounded-full bg-[#28C840] flex-shrink-0" />
                         <div className="flex-1 mx-[12px]">
-                            <div className="bg-[#1A1A1A] rounded-[6px] px-[12px] py-[5px] max-w-[280px] mx-auto">
-                                <span className="text-[11px] opacity-25 font-light">lucidify.vercel.app/dashboard</span>
+                            <div className="bg-white rounded-[6px] px-[12px] py-[5px] max-w-[280px] mx-auto border border-[#E0E0E0]">
+                                <span className="text-[11px] font-light" style={{ color: 'rgba(0,0,0,0.35)' }}>lucidify.vercel.app/dashboard</span>
                             </div>
                         </div>
                     </div>
