@@ -200,35 +200,20 @@ const DashboardPreviewSection = () => {
                         <div className="flex-1 px-[14px] sm:px-[22px] py-[16px] overflow-hidden flex flex-col gap-[10px]">
 
                             {/* Welcome card */}
-                            <div
-                                className="rounded-[14px] px-[16px] sm:px-[20px] py-[12px] sm:py-[14px] flex-shrink-0"
-                                style={{
-                                    background: isDark
-                                        ? 'linear-gradient(135deg, rgba(98,101,240,0.25) 0%, rgba(114,92,247,0.15) 100%)'
-                                        : 'linear-gradient(135deg, rgba(98,101,240,0.12) 0%, rgba(114,92,247,0.08) 100%)',
-                                    border: isDark ? '1px solid rgba(114,92,247,0.2)' : '1px solid rgba(114,92,247,0.15)',
-                                }}
-                            >
-                                <p className="text-[13px] sm:text-[15px] font-semibold" style={{ color: isDark ? '#ffffff' : '#111111' }}>Welcome back, James 👋</p>
-                                <p className="text-[10px] sm:text-[11px] font-light mt-[2px]" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }}>Sunday, Mar 15</p>
+                            <div className="DashboardPurpleCard rounded-[14px] px-[16px] sm:px-[20px] py-[12px] sm:py-[14px] flex-shrink-0">
+                                <p className="text-[13px] sm:text-[15px] font-semibold" style={{ color: '#ffffff' }}>Welcome back, James 👋</p>
+                                <p className="text-[10px] sm:text-[11px] font-light mt-[2px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Sunday, Mar 15</p>
                             </div>
 
                             {/* Stat chips */}
                             <div className="grid grid-cols-3 gap-[6px] flex-shrink-0">
                                 {mockStats.map(s => (
-                                    <div
-                                        key={s.label}
-                                        className="rounded-[10px] px-[10px] py-[8px]"
-                                        style={{
-                                            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
-                                            border: isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(0,0,0,0.07)',
-                                        }}
-                                    >
+                                    <div key={s.label} className="DashboardPurpleCard rounded-[10px] px-[10px] py-[8px]">
                                         <div className="flex items-center justify-between mb-[4px]">
-                                            <p className="text-[8px] sm:text-[9px] font-light" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }}>{s.label}</p>
+                                            <p className="text-[8px] sm:text-[9px] font-light" style={{ color: 'rgba(255,255,255,0.5)' }}>{s.label}</p>
                                             <span className="text-[10px]">{s.icon}</span>
                                         </div>
-                                        <p className="text-[16px] sm:text-[20px] font-semibold" style={{ color: s.color }}>{s.value}</p>
+                                        <p className="text-[16px] sm:text-[20px] font-semibold" style={{ color: '#ffffff' }}>{s.value}</p>
                                     </div>
                                 ))}
                             </div>
