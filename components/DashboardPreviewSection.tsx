@@ -25,9 +25,16 @@ const navItemsLight = [
     { icon: '/Black Transactions Icon.png', label: 'Transactions', active: false },
 ];
 
-const mockProjects = [
-    { name: 'E-Commerce Site', progress: 72, color: '#998BF9', statusLabel: 'Developing' },
-    { name: 'Brand Refresh', progress: 45, color: '#5840F0', statusLabel: 'Designing' },
+const mockProject = { name: 'E-Commerce Site', progress: 72, status: 'Developing', due: 'Apr 15, 2026', activity: 'Homepage design approved ✓' };
+const mockStats = [
+    { label: 'Total Projects', value: '2', icon: '📁', color: '#725CF7' },
+    { label: 'Active', value: '1', icon: '✅', color: '#22c55e' },
+    { label: 'Pending', value: '1', icon: '⏳', color: '#f59e0b' },
+];
+const mockQuickLinks = [
+    { label: 'My Projects', icon: '📋' },
+    { label: 'Messages', icon: '💬' },
+    { label: 'Settings', icon: '⚙️' },
 ];
 
 const DashboardPreviewSection = () => {
@@ -136,7 +143,7 @@ const DashboardPreviewSection = () => {
                     </div>
 
                     {/* Dashboard interior */}
-                    <div className="DashboardBackgroundGradient flex" style={{ height: '420px' }}>
+                    <div className="DashboardBackgroundGradient flex" style={{ height: '440px' }}>
 
                         {/* Sidebar icon-only */}
                         {/* <div
@@ -190,66 +197,99 @@ const DashboardPreviewSection = () => {
                         </div>
 
                         {/* Main content */}
-                        <div className="flex-1 px-[16px] sm:px-[28px] py-[20px] overflow-hidden">
-                            {/* Top bar */}
-                            <div className="flex items-center justify-between mb-[20px] sm:mb-[26px]">
-                                <span className="text-[13px] font-semibold opacity-50" style={{ color: isDark ? '#ffffff' : '#111111' }}>Dashboard</span>
-                                <div className="flex items-center gap-[10px]">
-                                    {/* Notification badge with ping */}
-                                    <div className="NotifPing w-[20px] h-[20px] rounded-full bg-[#6265F0] flex items-center justify-center">
-                                        <span className="text-[9px] font-medium relative z-10">3</span>
-                                    </div>
+                        <div className="flex-1 px-[14px] sm:px-[22px] py-[16px] overflow-hidden flex flex-col gap-[10px]">
+
+                            {/* Welcome card */}
+                            <div
+                                className="rounded-[14px] px-[16px] sm:px-[20px] py-[12px] sm:py-[14px] flex-shrink-0"
+                                style={{
+                                    background: isDark
+                                        ? 'linear-gradient(135deg, rgba(98,101,240,0.25) 0%, rgba(114,92,247,0.15) 100%)'
+                                        : 'linear-gradient(135deg, rgba(98,101,240,0.12) 0%, rgba(114,92,247,0.08) 100%)',
+                                    border: isDark ? '1px solid rgba(114,92,247,0.2)' : '1px solid rgba(114,92,247,0.15)',
+                                }}
+                            >
+                                <p className="text-[13px] sm:text-[15px] font-semibold" style={{ color: isDark ? '#ffffff' : '#111111' }}>Welcome back, James 👋</p>
+                                <p className="text-[10px] sm:text-[11px] font-light mt-[2px]" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }}>Sunday, Mar 15</p>
+                            </div>
+
+                            {/* Stat chips */}
+                            <div className="grid grid-cols-3 gap-[6px] flex-shrink-0">
+                                {mockStats.map(s => (
                                     <div
-                                        className="hidden sm:flex w-[80px] h-[30px] rounded-[8px] items-center justify-center gap-[5px]"
-                                        style={isDark
-                                            ? { background: 'var(--black-gradient, #1a1a1a)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }
-                                            : { background: '#111111' }
-                                        }
+                                        key={s.label}
+                                        className="rounded-[10px] px-[10px] py-[8px]"
+                                        style={{
+                                            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                                            border: isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(0,0,0,0.07)',
+                                        }}
                                     >
-                                        <span className="text-[10px] font-light" style={{ color: '#ffffff', opacity: isDark ? 0.6 : 0.9 }}>Settings</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Welcome */}
-                            <div className="mb-[20px] sm:mb-[24px]">
-                                <h3 className="text-[16px] sm:text-[20px] font-semibold">Welcome back, James 👋</h3>
-                                <p className="text-[11px] opacity-35 font-light mt-[3px]">Here&apos;s what&apos;s happening with your projects.</p>
-                            </div>
-
-                            {/* Project cards with animated progress bars */}
-                            <div className="flex gap-[10px] sm:gap-[14px] flex-wrap mb-[18px]">
-                                {mockProjects.map((p, i) => (
-                                    <div key={p.name} className="BlackGradient ContentCardShadow rounded-[14px] px-[14px] sm:px-[18px] py-[12px] sm:py-[14px] flex-1 min-w-[120px]">
-                                        <p className="text-[11px] sm:text-[13px] font-semibold mb-[8px] truncate">{p.name}</p>
-                                        <div className="w-full h-[4px] bg-white/10 rounded-full mb-[6px]">
-                                            <div
-                                                className="h-full rounded-full"
-                                                style={{
-                                                    width: progressVisible ? `${p.progress}%` : '0%',
-                                                    backgroundColor: p.color,
-                                                    transition: 'width 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                    transitionDelay: progressVisible ? `${0.3 + i * 0.15}s` : '0s',
-                                                }}
-                                            />
+                                        <div className="flex items-center justify-between mb-[4px]">
+                                            <p className="text-[8px] sm:text-[9px] font-light" style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }}>{s.label}</p>
+                                            <span className="text-[10px]">{s.icon}</span>
                                         </div>
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[10px] opacity-35 font-light">{p.statusLabel}</span>
-                                            <span className="text-[10px] opacity-50 font-light">{p.progress}%</span>
-                                        </div>
+                                        <p className="text-[16px] sm:text-[20px] font-semibold" style={{ color: s.color }}>{s.value}</p>
                                     </div>
                                 ))}
                             </div>
 
-                            {/* Stats row */}
-                            <div className="flex gap-[10px]">
-                                {[
-                                    { label: 'Messages', value: '2 new' },
-                                    { label: 'Next Payment', value: 'Due in 3d' },
-                                ].map(s => (
-                                    <div key={s.label} className="BlackGradient ContentCardShadow rounded-[12px] px-[12px] sm:px-[16px] py-[10px] flex-1">
-                                        <p className="text-[9px] sm:text-[10px] opacity-30 font-light mb-[2px]">{s.label}</p>
-                                        <p className="text-[11px] sm:text-[13px] font-semibold">{s.value}</p>
+                            {/* Active project card */}
+                            <div
+                                className="rounded-[12px] px-[14px] sm:px-[16px] py-[12px] flex-shrink-0"
+                                style={{
+                                    background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                                    border: isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(0,0,0,0.07)',
+                                }}
+                            >
+                                <div className="flex items-center justify-between mb-[10px]">
+                                    <p className="text-[10px] font-semibold" style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)' }}>Active Project</p>
+                                    <span
+                                        className="text-[8px] px-[6px] py-[2px] rounded-full font-medium"
+                                        style={{ background: 'rgba(96,165,250,0.15)', color: '#60a5fa' }}
+                                    >{mockProject.status}</span>
+                                </div>
+                                <p className="text-[12px] sm:text-[13px] font-semibold mb-[8px]" style={{ color: isDark ? '#ffffff' : '#111111' }}>{mockProject.name}</p>
+                                <div className="flex items-center gap-[8px] mb-[8px]">
+                                    <div className="flex-1 h-[5px] rounded-full overflow-hidden" style={{ background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }}>
+                                        <div
+                                            className="h-full rounded-full"
+                                            style={{
+                                                width: progressVisible ? `${mockProject.progress}%` : '0%',
+                                                background: 'linear-gradient(to right, #6265f0, #725CF7)',
+                                                transition: 'width 1.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                transitionDelay: progressVisible ? '0.3s' : '0s',
+                                            }}
+                                        />
+                                    </div>
+                                    <span className="text-[10px] font-medium flex-shrink-0" style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)' }}>{mockProject.progress}%</span>
+                                </div>
+                                <div className="flex gap-[6px]">
+                                    {[{ label: 'Due', value: mockProject.due }, { label: 'Activity', value: mockProject.activity }].map(d => (
+                                        <div
+                                            key={d.label}
+                                            className="flex-1 rounded-[8px] px-[8px] py-[6px]"
+                                            style={{ background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}
+                                        >
+                                            <p className="text-[8px] font-light mb-[1px]" style={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.35)' }}>{d.label}</p>
+                                            <p className="text-[9px] font-medium truncate" style={{ color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>{d.value}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Quick links */}
+                            <div className="grid grid-cols-3 gap-[6px] flex-shrink-0">
+                                {mockQuickLinks.map(q => (
+                                    <div
+                                        key={q.label}
+                                        className="rounded-[10px] px-[8px] py-[8px] flex flex-col gap-[4px]"
+                                        style={{
+                                            background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+                                            border: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)',
+                                        }}
+                                    >
+                                        <span className="text-[12px]">{q.icon}</span>
+                                        <p className="text-[9px] font-medium" style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)' }}>{q.label}</p>
                                     </div>
                                 ))}
                             </div>
