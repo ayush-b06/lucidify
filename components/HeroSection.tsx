@@ -172,7 +172,7 @@ const HeroSection = () => {
           <div className="FadeInUp3 flex justify-center">
             <Link
               ref={magnetRef}
-              href="/"
+              href="/demo"
               className="flex justify-center items-center rounded-full bg-white mr-[32px] ThreeD hover:shadow-lg hover:shadow-gray-600"
               style={{ transition: 'transform 0.2s ease, box-shadow 0.2s ease' }}
             >
