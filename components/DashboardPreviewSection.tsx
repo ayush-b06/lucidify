@@ -175,7 +175,7 @@ const DashboardPreviewSection = () => {
                                     <div
                                         key={item.label}
                                         className={`flex items-center gap-[10px] px-[10px] py-[7px] rounded-[9px] ${item.active ? (isDark ? 'BlackWithLightGradient SpecialContentCardShadow' : '') : ''}`}
-                                        style={item.active && !isDark ? { background: 'rgba(0,0,0,0.07)' } : {}}
+                                        style={item.active && !isDark ? { background: '#ffffff', boxShadow: '0 1px 6px rgba(0,0,0,0.10)' } : {}}
                                     >
                                         <div className={`w-[14px] h-[14px] flex-shrink-0 ${item.active ? '' : 'opacity-35'}`}>
                                             <Image src={item.icon} alt={item.label} layout="responsive" width={0} height={0} />
