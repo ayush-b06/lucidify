@@ -45,7 +45,7 @@ const Popup: React.FC<PopupProps> = ({ closePopup, isVisible }) => {
 
   return (
     <div
-      className={`fixed inset-0 flex justify-center items-end sm:items-center z-50 transition-opacity duration-300 px-[12px] sm:px-0 pb-[12px] sm:pb-0 ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      className={`fixed inset-0 flex justify-center items-end sm:items-center z-[100] transition-opacity duration-300 px-[12px] sm:px-0 pb-[12px] sm:pb-0 ${isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
     >
       <div
