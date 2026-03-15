@@ -206,7 +206,7 @@ const DashboardPreviewSection = () => {
                                             : { background: '#111111' }
                                         }
                                     >
-                                        <span className="text-[10px] font-light text-white" style={{ opacity: isDark ? 0.6 : 0.85 }}>Settings</span>
+                                        <span className="text-[10px] font-light" style={{ color: '#ffffff', opacity: isDark ? 0.6 : 0.9 }}>Settings</span>
                                     </div>
                                 </div>
                             </div>
