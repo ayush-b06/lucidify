@@ -30,8 +30,8 @@ const Footer = () => {
                         <h2 className="font-semibold">Company</h2>
                         <Link
                             className="font-light opacity-40 hover:opacity-65 xl:text-[16px] text-[14px]"
-                            href="/">
-                            Services
+                            href="/demo">
+                            Get a Demo
                         </Link>
                         <Link
                             className="font-light opacity-40 hover:opacity-65 xl:text-[16px] text-[14px]"
@@ -40,16 +40,9 @@ const Footer = () => {
                         </Link>
                         <Link
                             className="font-light opacity-40 hover:opacity-65 xl:text-[16px] text-[14px]"
-                            href="/">
+                            href="/contact">
                             Contact
                         </Link>
-                        <Link
-                            className="font-light opacity-40 hover:opacity-65 xl:text-[16px] text-[14px]"
-                            href="/">
-                            Start a Project
-                        </Link>
-
-
                     </div>
                 </div>
 
