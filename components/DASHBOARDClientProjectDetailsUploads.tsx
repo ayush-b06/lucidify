@@ -64,12 +64,12 @@ const DASHBOARDClientProjectDetailsUploads = ({ userId, projectId }: DASHBOARDCl
                 try {
                     const snap = await getDocs(collection(db, `${basePath}/section web designs`));
                     setSectionDesigns(snap.docs.map(d => d.data() as Design));
-                } catch { setSectionDesigns([]); }
+                } catch { setError('Could not load section designs. Please reload to retry.'); }
 
                 try {
                     const snap = await getDocs(collection(db, `${basePath}/full-page web designs`));
                     setFullPageDesigns(snap.docs.map(d => d.data() as Design));
-                } catch { setFullPageDesigns([]); }
+                } catch { setError('Could not load full-page designs. Please reload to retry.'); }
 
             } catch (err) {
                 console.error(err);
@@ -116,7 +116,7 @@ const DASHBOARDClientProjectDetailsUploads = ({ userId, projectId }: DASHBOARDCl
                     <div className="relative max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
                         <img src={lightboxURL} alt="Design preview" className="max-w-full max-h-[85vh] rounded-[16px] object-contain" />
                         <button
-                            onClick={() => setLightboxURL(null)}
+                            onClick={() => setLightboxURL(null)} aria-label="Close preview"
                             className="absolute -top-[14px] -right-[14px] w-[32px] h-[32px] rounded-full BlackGradient ContentCardShadow flex items-center justify-center text-[16px] opacity-70 hover:opacity-100"
                         >✕</button>
                     </div>

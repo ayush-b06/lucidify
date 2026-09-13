@@ -1,11 +1,12 @@
 "use client";
 
+import { getTotalCost, getPaid, getRemaining, paymentCount, paidCount } from '@/utils/billing';
 import { useEffect, useState } from 'react';
-import { collection, doc, getDocs, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, runTransaction } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import DashboardAdminSideNav from './DashboardAdminSideNav';
 import DashboardTopBar from './DashboardTopBar';
-import { writeNotification } from '../utils/notifications';
+import { queueNotification } from '../utils/notifications';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -37,14 +38,6 @@ const PLAN_LABELS: Record<number, string> = {
     5: '5-Week',
 };
 
-const getTotalCost = (p: Project) => {
-    const plan = p.paymentPlan ?? 0;
-    const amount = p.paymentAmount ?? 0;
-    if (!plan || !amount) return 0;
-    return plan === 1 ? amount : amount * plan;
-};
-const getPaid = (p: Project) => (p.weeksPaid ?? 0) * (p.paymentAmount ?? 0);
-const getRemaining = (p: Project) => Math.max(0, getTotalCost(p) - getPaid(p));
 const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const StatusBadge = ({ status }: { status?: string }) => {
@@ -60,6 +53,8 @@ const StatusBadge = ({ status }: { status?: string }) => {
 
 const DASHBOARDAdminTransactions = () => {
     const [clients, setClients] = useState<ClientEntry[]>([]);
+    const [error, setError] = useState('');
+    const [attempt, setAttempt] = useState(0);
     const [loading, setLoading] = useState(true);
     const [markingPaid, setMarkingPaid] = useState<string | null>(null); // `${userId}_${projectId}`
 
@@ -76,7 +71,7 @@ const DASHBOARDAdminTransactions = () => {
 
                     const projectsSnap = await getDocs(collection(db, 'users', userDoc.id, 'projects'));
                     const projects = projectsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Project));
-                    const activeProjects = projects.filter(p => (p.paymentPlan ?? 0) > 0 && (p.paymentAmount ?? 0) > 0);
+                    const activeProjects = projects.filter(p => getTotalCost(p) > 0);
 
                     if (activeProjects.length > 0) {
                         entries.push({
@@ -91,40 +86,36 @@ const DASHBOARDAdminTransactions = () => {
 
                 setClients(entries);
             } catch (e) {
-                console.error(e);
+                setError('Could not load or update payments. Please retry.');
             } finally {
                 setLoading(false);
             }
         };
         fetchAll();
-    }, []);
+    }, [attempt]);
 
     const handleMarkPaid = async (client: ClientEntry, project: Project) => {
         const key = `${client.userId}_${project.id}`;
-        const totalPayments = project.paymentPlan === 1 ? 1 : (project.paymentPlan ?? 1);
-        const currentPaid = project.weeksPaid ?? 0;
-        if (currentPaid >= totalPayments) return;
-
-        setMarkingPaid(key);
+        if (markingPaid) return;
+        setMarkingPaid(key); setError('');
         try {
-            const newWeeksPaid = currentPaid + 1;
-            await updateDoc(doc(db, 'users', client.userId, 'projects', project.id), {
-                weeksPaid: newWeeksPaid,
-                ...(newWeeksPaid >= totalPayments ? { paymentStatus: 'Paid' } : {}),
+            const result = await runTransaction(db, async transaction => {
+                const ref = doc(db, 'users', client.userId, 'projects', project.id);
+                const snap = await transaction.get(ref);
+                if (!snap.exists()) throw new Error('Project not found');
+                const current = snap.data();
+                // A stale second tab must not count the same payment twice.
+                if (paidCount(current) !== paidCount(project)) throw new Error('Payments changed; refresh before recording the next payment.');
+                const totalPayments = paymentCount(current);
+                if (!totalPayments || paidCount(current) >= totalPayments) throw new Error('No payments remaining');
+                const newWeeksPaid = paidCount(current) + 1;
+                const isFullyPaid = newWeeksPaid === totalPayments;
+                transaction.update(ref, { weeksPaid: newWeeksPaid, paymentStatus: isFullyPaid ? 'Paid' : 'On Time' });
+                queueNotification(transaction, client.userId, isFullyPaid ? 'Payment complete!' : 'Payment received',
+                    `Payment ${newWeeksPaid} of ${totalPayments} received for "${project.projectName}".`, 'payment', project.id, `/dashboard/projects/${project.id}`);
+                return { newWeeksPaid, isFullyPaid };
             });
-
-            // Notify client
-            const isFullyPaid = newWeeksPaid >= totalPayments;
-            writeNotification(
-                client.userId,
-                isFullyPaid ? 'Payment complete!' : 'Payment received',
-                isFullyPaid
-                    ? `Your project "${project.projectName}" is fully paid. Thank you!`
-                    : `Payment ${newWeeksPaid} of ${totalPayments} received for "${project.projectName}".`,
-                'payment',
-                project.id,
-                `/dashboard/projects/${project.id}?projectId=${project.id}&userId=${client.userId}`,
-            );
+            const { newWeeksPaid, isFullyPaid } = result;
 
             // Update local state
             setClients(prev => prev.map(c =>
@@ -140,7 +131,7 @@ const DASHBOARDAdminTransactions = () => {
                     : c
             ));
         } catch (e) {
-            console.error(e);
+            setError('Could not load or update payments. Please retry.');
         } finally {
             setMarkingPaid(null);
         }
@@ -158,6 +149,7 @@ const DASHBOARDAdminTransactions = () => {
 
             <div className="flex-1 flex flex-col pt-[60px] xl:pt-0 min-h-0 overflow-hidden">
                 <DashboardTopBar title="Transactions" />
+                {error && <div role="alert" className="DashboardNotice">{error} <button onClick={() => { setError(''); setAttempt(n => n + 1); }}>Retry</button></div>}
 
                 {/* Scrollable Content */}
                 <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">

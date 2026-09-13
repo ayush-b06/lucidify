@@ -1,4 +1,5 @@
 "use client";
+import { useDialog } from '@/hooks/useDialog';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { collection, addDoc } from 'firebase/firestore';
@@ -42,7 +43,7 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return;
+        if (!user || loading) return;
         if (!projectName.trim()) {
             setError('Give your project a name first.');
             return;
@@ -64,10 +65,12 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
         } catch (err) {
             console.error(err);
             setError('Something went wrong. Please try again.');
+        } finally {
             setLoading(false);
         }
     };
 
+    const dialogRef = useDialog<HTMLDivElement>(isVisible, closeCreatProjectPopup, loading);
     if (!isVisible) return null;
 
     const textColor = isDark ? '#ffffff' : '#111111';
@@ -103,10 +106,10 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
                 opacity: entered ? 1 : 0,
                 transition: 'opacity 0.18s ease',
             }}
-            onClick={(e) => { if (e.target === e.currentTarget) closeCreatProjectPopup(); }}
+            onClick={(e) => { if (!loading && e.target === e.currentTarget) closeCreatProjectPopup(); }}
         >
             <div
-                className="relative w-full max-w-[460px] rounded-[28px] overflow-hidden"
+                ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Create project" className="DashboardDialog relative w-full max-w-[460px] max-h-[90dvh] rounded-[28px] overflow-y-auto"
                 style={{
                     background: isDark
                         ? 'linear-gradient(160deg, #161618 0%, #0f0f11 100%)'
@@ -131,7 +134,7 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
                 <div className="px-[32px] pt-[32px] pb-[24px] text-center relative">
                     {/* Close button */}
                     <button
-                        onClick={closeCreatProjectPopup}
+                        onClick={closeCreatProjectPopup} disabled={loading} aria-label="Close create project"
                         className="absolute top-[16px] right-[16px] flex items-center justify-center w-[30px] h-[30px] rounded-[9px] transition-opacity hover:opacity-60"
                         style={{
                             background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
@@ -181,7 +184,7 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
                             </span>
                         </div>
                         <input
-                            ref={nameRef}
+                            ref={nameRef} aria-label="Project name"
                             type="text"
                             value={projectName}
                             onChange={(e) => { setProjectName(e.target.value); setError(''); }}
@@ -226,7 +229,7 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
                                 </span>
                             )}
                         </div>
-                        <textarea
+                        <textarea aria-label="Project description"
                             value={projectDescription}
                             onChange={(e) => setProjectDescription(e.target.value)}
                             onFocus={() => setDescFocused(true)}
@@ -261,7 +264,7 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
                             transition: 'opacity 0.15s, box-shadow 0.2s, transform 0.1s',
                         }}
                     >
-                        {loading ? 'Creating...' : 'Continue to Setup →'}
+                        {loading ? 'Creating...' : 'Create project'}
                     </button>
                 </form>
             </div>

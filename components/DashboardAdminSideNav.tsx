@@ -2,6 +2,7 @@
 
 import { auth, db } from '@/firebaseConfig';
 import { collection, doc, getDocs, onSnapshot } from 'firebase/firestore';
+import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import Image from 'next/image';
 import Link from 'next/link';
 import React, { useEffect, useState } from 'react';
@@ -15,7 +16,7 @@ type DashboardSideNAdminavProps = {
 const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight }) => {
     const { theme } = useTheme();
     const isLight = theme === 'light';
-    const [totalUnread, setTotalUnread] = useState<number>(0);
+    const totalUnread = useUnreadMessages();
     const [isOpen, setIsOpen] = useState(false);
     const [userData, setUserData] = useState<{
         selectedAvatar: string | null;
@@ -42,26 +43,6 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
         return () => unsub();
     }, []);
 
-    useEffect(() => {
-        const fetchTotalUnread = async () => {
-            const usersSnapshot = await getDocs(collection(db, "users"));
-            let total = 0;
-            for (const userDoc of usersSnapshot.docs) {
-                const userId = userDoc.id;
-                const conversationsRef = collection(db, "users", userId, "conversations");
-                const conversationsSnapshot = await getDocs(conversationsRef);
-                conversationsSnapshot.forEach(doc => {
-                    const data = doc.data();
-                    if (data.unreadCounts?.["Lucidify"]) {
-                        total += data.unreadCounts["Lucidify"];
-                    }
-                });
-            }
-            setTotalUnread(total);
-        };
-        fetchTotalUnread();
-    }, []);
-
     const navLinks = [
         { href: "/dashboard", label: "Dashboard", icon: isLight ? "/Black Dashboard Icon.png" : "/Dashboard Icon.png", key: "dashboard" },
         { href: "/dashboard/projects", label: "Projects", icon: isLight ? "/Black Projects Icon.png" : "/Projects Icon.png", key: "projects" },
@@ -73,9 +54,9 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
     return (
         <>
             {/* Mobile Top Bar */}
-            <div className="xl:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-[20px] h-[60px] bg-black" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="xl:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-[20px] h-[60px] DashboardMobileHeader" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                 <Link href="/dashboard/" className="relative w-[110px]">
-                    <Image src={isLight ? "/Lucidify black logo.png" : "/Lucidify white logo.png"} alt="Lucidify Logo" layout="responsive" width={0} height={0} />
+                    <Image src={isLight ? "/Lucidify black logo.png" : "/Lucidify white logo.png"} alt="Lucidify Logo" width={64} height={64} style={{ width: "100%", height: "auto" }} sizes="150px" />
                 </Link>
                 <div className="flex items-center gap-[10px]">
                     <NotificationBell />
@@ -84,9 +65,9 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
                         className="flex flex-col justify-center items-center gap-[5px] w-[40px] h-[40px] rounded-[10px] BlackWithLightGradient ContentCardShadow"
                         aria-label="Open menu"
                     >
-                        <span className="block w-[18px] h-[2px] bg-white rounded-full" />
-                        <span className="block w-[18px] h-[2px] bg-white rounded-full" />
-                        <span className="block w-[12px] h-[2px] bg-white rounded-full ml-[3px]" />
+                        <span className="block w-[18px] h-[2px] bg-current rounded-full" />
+                        <span className="block w-[18px] h-[2px] bg-current rounded-full" />
+                        <span className="block w-[12px] h-[2px] bg-current rounded-full ml-[3px]" />
                     </button>
                 </div>
             </div>
@@ -104,7 +85,7 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
                 <div className="flex flex-col">
                     <div className="flex items-center justify-between mb-[40px]">
                         <Link href="/dashboard/" className="relative w-[120px]" onClick={() => setIsOpen(false)}>
-                            <Image src={isLight ? "/Lucidify black logo.png" : "/Lucidify white logo.png"} alt="Lucidify Logo" layout="responsive" width={0} height={0} />
+                            <Image src={isLight ? "/Lucidify black logo.png" : "/Lucidify white logo.png"} alt="Lucidify Logo" width={64} height={64} style={{ width: "100%", height: "auto" }} sizes="150px" />
                         </Link>
                         <button onClick={() => setIsOpen(false)} className="opacity-60 hover:opacity-100 text-[22px] leading-none">✕</button>
                     </div>
@@ -117,7 +98,7 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
                                 <div className="flex mx-[20px] my-[9px] items-center justify-between w-full">
                                     <div className={`${highlight === link.key ? "opacity-100" : "opacity-50"} flex items-center`}>
                                         <div className="relative w-[16px] h-[16px] mr-[15px]">
-                                            <Image src={link.icon} alt={link.label} layout="responsive" width={0} height={0} />
+                                            <Image src={link.icon} alt={link.label} width={64} height={64} style={{ width: "100%", height: "auto" }} sizes="150px" />
                                         </div>
                                         <h3 className="text-[15px] font-light">{link.label}</h3>
                                     </div>
@@ -137,7 +118,7 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
                     <div className="flex w-full items-center justify-between mx-[20px] my-[14px]">
                         <div className="flex items-center gap-[12px]">
                             <div className="relative w-[35px] rounded-full overflow-hidden flex-shrink-0">
-                                <Image src={userData.selectedAvatar ? `/${userData.selectedAvatar}` : "/Lucidify Umbrella.png"} alt="Admin Profile" layout="responsive" width={0} height={0} />
+                                <Image src={userData.selectedAvatar ? `/${userData.selectedAvatar}` : "/Lucidify Umbrella.png"} alt="Admin Profile" width={64} height={64} style={{ width: "100%", height: "auto" }} sizes="150px" />
                             </div>
                             <div className="flex flex-col gap-[2px]">
                                 <div className="text-[14px]">{userData.firstName || 'Admin'} {userData.lastName || ''}</div>
@@ -145,7 +126,7 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
                             </div>
                         </div>
                         <div className="relative w-[12px]">
-                            <Image src="/White Right Arrow.png" alt="Right Arrow" layout="responsive" width={0} height={0} />
+                            <Image src="/White Right Arrow.png" className="DashboardMonochromeIcon" alt="Right Arrow" width={64} height={64} style={{ width: "100%", height: "auto" }} sizes="150px" />
                         </div>
                     </div>
                 </Link>
@@ -156,18 +137,18 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
                 <div className="flex flex-col justify-between h-full">
                     <div className="flex flex-col items-center">
                         <Link href="/dashboard/" className="relative w-[150px]">
-                            <Image src={isLight ? "/Lucidify black logo.png" : "/Lucidify white logo.png"} alt="Lucidify Logo" layout="responsive" width={0} height={0} />
+                            <Image src={isLight ? "/Lucidify black logo.png" : "/Lucidify white logo.png"} alt="Lucidify Logo" width={64} height={64} style={{ width: "100%", height: "auto" }} sizes="150px" />
                         </Link>
 
-                        <div className="flex flex-col mt-[165px] w-full">
-                                    <div className="flex items-center rounded-[10px] mt-[45px] mb-[45px] SearchBackground ContentCardShadow">
+                        <div className="flex flex-col mt-[40px] w-full">
+                                    <Link href="/dashboard/projects" className="flex items-center rounded-[10px] mt-[20px] mb-[28px] SearchBackground ContentCardShadow">
                                 <div className="flex mx-[20px] my-[9px] items-center">
                                     <div className="relative w-[16px] h-[16px] mr-[8px]">
-                                        <Image src="/Search Icon.png" alt="Search Icon" layout="responsive" width={0} height={0} />
+                                        <Image src="/Search Icon.png" className="DashboardMonochromeIcon" alt="Search Icon" width={64} height={64} style={{ width: "100%", height: "auto" }} sizes="150px" />
                                     </div>
-                                    <h3 className="text-[15px] font-light opacity-70">Search</h3>
+                                    <h3 className="text-[15px] font-light opacity-70">Find a project</h3>
                                 </div>
-                            </div>
+                            </Link>
 
                             <div className="flex flex-col gap-[10px]">
                                 <div className="opacity-60 tracking-[1px] font-extralight text-[14px]">MENU</div>
@@ -178,11 +159,11 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
                                             <div className="flex mx-[20px] my-[9px] items-center justify-between w-full">
                                                 <div className={`${highlight === link.key ? "opacity-100" : "opacity-50"} flex items-center`}>
                                                     <div className="relative w-[16px] h-[16px] mr-[15px]">
-                                                        <Image src={link.icon} alt={link.label} layout="responsive" width={0} height={0} />
+                                                        <Image src={link.icon} alt={link.label} width={64} height={64} style={{ width: "100%", height: "auto" }} sizes="150px" />
                                                     </div>
                                                     <h3 className="text-[15px] font-light">{link.label}</h3>
                                                 </div>
-                                                {link.key === "messages" && (
+                                                {link.key === "messages" && totalUnread > 0 && (
                                                     <div className="PopupAttentionGradient PopupAttentionShadow rounded-[7px] flex justify-center items-center min-w-[20px] min-h-[20px]">
                                                         <h3 className="mx-[8px] text-[11px]">{totalUnread}</h3>
                                                     </div>
@@ -202,7 +183,7 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
                                 <div className="relative w-[35px] rounded-full overflow-hidden">
                                     <Image
                                         src={userData.selectedAvatar ? `/${userData.selectedAvatar}` : "/Lucidify Umbrella.png"}
-                                        alt="Admin Profile" layout="responsive" width={0} height={0} />
+                                        alt="Admin Profile" width={64} height={64} style={{ width: "100%", height: "auto" }} sizes="150px" />
                                 </div>
                                 <div className="flex flex-col gap-[2px]">
                                     <div className="text-[14px]">{userData.firstName || 'Admin'} {userData.lastName || ''}</div>
@@ -210,7 +191,7 @@ const DashboardAdminSideNav: React.FC<DashboardSideNAdminavProps> = ({ highlight
                                 </div>
                             </div>
                             <div className="relative w-[12px]">
-                                <Image src="/White Right Arrow.png" alt="Right Arrow" layout="responsive" width={0} height={0} />
+                                <Image src="/White Right Arrow.png" className="DashboardMonochromeIcon" alt="Right Arrow" width={64} height={64} style={{ width: "100%", height: "auto" }} sizes="150px" />
                             </div>
                         </div>
                     </Link>

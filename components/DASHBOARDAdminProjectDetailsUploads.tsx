@@ -49,13 +49,13 @@ const DASHBOARDAdminProjectDetailsUploads = ({ userId, projectId }: DASHBOARDAdm
                 try {
                     const snap = await getDocs(collection(db, `${basePath}/section web designs`));
                     setSectionDesigns(snap.docs.map(d => d.data() as Design));
-                } catch { setSectionDesigns([]); }
+                } catch { setError('Could not load section designs. Please reload to retry.'); }
 
                 // Full-page designs
                 try {
                     const snap = await getDocs(collection(db, `${basePath}/full-page web designs`));
                     setFullPageDesigns(snap.docs.map(d => d.data() as Design));
-                } catch { setFullPageDesigns([]); }
+                } catch { setError('Could not load full-page designs. Please reload to retry.'); }
 
             } catch (err) {
                 console.error(err);
@@ -98,14 +98,6 @@ const DASHBOARDAdminProjectDetailsUploads = ({ userId, projectId }: DASHBOARDAdm
                 isVisible={isPopupOpen}
                 userId={userId}
                 projectId={projectId}
-                onDesignAdded={() => writeNotification(
-                    userId,
-                    'New design uploaded',
-                    `A new design was added to ${projectName || 'your project'}.`,
-                    'upload',
-                    projectId,
-                    `/dashboard/projects/${projectId}/uploads?projectId=${projectId}&userId=${userId}`,
-                )}
             />
 
             {/* Lightbox */}
@@ -117,7 +109,7 @@ const DASHBOARDAdminProjectDetailsUploads = ({ userId, projectId }: DASHBOARDAdm
                     <div className="relative max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
                         <img src={lightboxURL} alt="Design preview" className="max-w-full max-h-[85vh] rounded-[16px] object-contain" />
                         <button
-                            onClick={() => setLightboxURL(null)}
+                            onClick={() => setLightboxURL(null)} aria-label="Close preview"
                             className="absolute -top-[14px] -right-[14px] w-[32px] h-[32px] rounded-full BlackGradient ContentCardShadow flex items-center justify-center text-[16px] opacity-70 hover:opacity-100"
                         >✕</button>
                     </div>
@@ -141,7 +133,6 @@ const DASHBOARDAdminProjectDetailsUploads = ({ userId, projectId }: DASHBOARDAdm
                                 className="font-normal text-[#ffffff66] text-sm sm:text-base whitespace-nowrap hover:text-white">Progress</Link>
                             <Link href={`/dashboard/projects/${projectId}/uploads?projectId=${projectId}&userId=${userId}`}
                                 className="font-normal text-base whitespace-nowrap border-b-2 border-[#725CF7] pb-[2px]">Uploads</Link>
-                            <div className="font-normal text-[#ffffff66] text-sm sm:text-base whitespace-nowrap opacity-40 cursor-not-allowed">Analytics</div>
                         </div>
 
                         {/* Header row */}

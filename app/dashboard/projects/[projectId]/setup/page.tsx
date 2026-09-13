@@ -1,35 +1,17 @@
 "use client";
+import Client from '@/components/DASHBOARDClientProjectSetup';
 
-import { Suspense } from 'react';
 import { useAuth } from '@/context/authContext';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import DASHBOARDClientProjectSetup from '@/components/DASHBOARDClientProjectSetup';
-import { useSearchParams } from 'next/navigation';
-
-const SetupPageInner = () => {
-    const { user, loading } = useAuth();
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const userId = searchParams.get('userId');
-    const projectId = searchParams.get('projectId');
-
-    useEffect(() => {
-        if (!loading && !user) {
-            router.push('/login');
-        }
-    }, [user, loading, router]);
-
-    if (loading || !user) return null;
-    if (!userId || !projectId) return null;
-
-    return <DASHBOARDClientProjectSetup userId={userId} projectId={projectId} />;
-};
-
-const SetupPage = () => (
-    <Suspense fallback={null}>
-        <SetupPageInner />
-    </Suspense>
-);
-
-export default SetupPage;
+import { useParams, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { ADMIN_EMAIL } from '@/utils/notifications';
+export default function ProjectPage() {
+    const { user } = useAuth();
+    const { projectId } = useParams<{ projectId: string }>();
+    const search = useSearchParams();
+    if (!user) return null;
+    const isAdmin = user.email === ADMIN_EMAIL;
+    const userId = isAdmin ? search.get('userId') : user.uid;
+    if (!userId) return <main className="DashboardBackgroundGradient p-8"><p>Select a client project to open its details.</p><Link href="/dashboard/projects" className="underline">Back to projects</Link></main>;
+    return <Client userId={userId} projectId={projectId} />;
+}

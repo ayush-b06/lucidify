@@ -16,14 +16,14 @@ const DashboardTopBar = ({ title }: DashboardTopBarProps) => {
     return (
         <>
             <div className="absolute BottomGradientBorder left-0 top-[103px] w-full" />
-            <div className="flex items-center justify-between px-[20px] sm:px-[50px] py-6 flex-shrink-0">
+            <div className="DashboardTopBar flex items-center justify-between px-[20px] sm:px-[50px] py-6 flex-shrink-0">
                 <div className="hidden xl:block font-semibold text-[15px]">{title}</div>
                 <div className="inline-flex items-center gap-3">
                     {/* Theme toggle — styled to match the mode you're switching TO */}
                     <button
                         onClick={toggleTheme}
                         aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-                        className="flex items-center gap-[8px] px-[14px] h-[40px] rounded-[12px] hover:opacity-80 transition-opacity"
+                        className="DashboardThemeToggle flex items-center gap-[8px] px-[14px] h-[40px] rounded-[12px] hover:opacity-80 transition-opacity"
                         style={{
                             background: isDark ? 'rgba(255,255,255,0.95)' : 'rgba(22,22,30,0.92)',
                             border: isDark ? '1px solid rgba(0,0,0,0.10)' : '1px solid rgba(255,255,255,0.14)',
@@ -57,7 +57,7 @@ const DashboardTopBar = ({ title }: DashboardTopBarProps) => {
                     <Link href="/dashboard/settings" className="hidden sm:flex w-[129px] h-[55px] items-center justify-center gap-2.5 rounded-[15px] BlackGradient ContentCardShadow">
                         <div className="font-light text-sm">Settings</div>
                         <div className="w-[30px]">
-                            <Image src={isDark ? "/Settings Icon.png" : "/Black Settings Icon.png"} alt="Settings" layout="responsive" width={0} height={0} />
+                            <Image src={isDark ? "/Settings Icon.png" : "/Black Settings Icon.png"} alt="Settings" width={64} height={64} style={{ width: "100%", height: "auto" }} sizes="150px" />
                         </div>
                     </Link>
                 </div>

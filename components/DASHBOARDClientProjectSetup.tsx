@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { queueAdminNotification } from '@/utils/notifications';
 import { db } from '../firebaseConfig';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/context/themeContext';
@@ -114,6 +115,10 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
     const { theme } = useTheme();
     const isDark = theme === 'dark';
 
+    const [saveError, setSaveError] = useState('');
+    const [loadFailed, setLoadFailed] = useState(false);
+    const [savingStep, setSavingStep] = useState(false);
+    const [loadAttempt, setLoadAttempt] = useState(0);
     const [step, setStep] = useState(1);
     const [visible, setVisible] = useState(true);
     const [goingForward, setGoingForward] = useState(true);
@@ -139,28 +144,33 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
 
     useEffect(() => {
         const load = async () => {
+            setInitialLoading(true); setLoadFailed(false); setSaveError('');
             try {
                 const snap = await getDoc(doc(db, 'users', userId, 'projects', projectId));
+                if (!snap.exists()) throw new Error('Project not found');
                 if (snap.exists()) {
                     const d = snap.data();
+                    if (d.setupComplete === true) { router.replace(`/dashboard/projects/${projectId}?userId=${userId}`); return; }
                     if (d.projectName) setProjectName(d.projectName);
                     if (d.dueDate) { setDueDate(d.dueDate); setDueDatePreset('Custom'); setShowDatePicker(true); }
                     if (d.logoUrl) { setSavedLogoUrl(d.logoUrl); setLogoPreview(d.logoUrl); }
                     if (d.platform) setPlatform(d.platform);
                     if (d.subpages?.length) setSelectedSubpages(d.subpages);
                     if (d.estimatedBudget) setBudget(d.estimatedBudget);
-                    if (d.paymentPlan) setPaymentPlan(d.paymentPlan);
+                    setPaymentPlan(d.requestedPaymentPlan || (typeof d.paymentPlan === 'string' ? d.paymentPlan : ''));
                     if (d.maintenancePlan) setMaintenance(d.maintenancePlan);
                 }
             } catch (err) {
-                console.error(err);
+                setLoadFailed(true); setSaveError('Could not load this project. Please retry.');
             } finally {
                 setInitialLoading(false);
             }
         };
         load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [userId, projectId, loadAttempt]);
+
+    useEffect(() => () => { if (logoPreview?.startsWith('blob:')) URL.revokeObjectURL(logoPreview); }, [logoPreview]);
 
     const navigate = (to: number) => {
         setGoingForward(to > step);
@@ -169,18 +179,23 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
     };
 
     const saveCurrentStep = async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const updates: Record<string, any> = {};
-        if (step === 1 && dueDate && dueDate !== 'custom') updates.dueDate = dueDate;
+        if (step === 1) updates.dueDate = dueDate && dueDate !== 'custom' ? dueDate : null;
+        if (step === 2) {
+            const logoUrl = logoFile ? await uploadLogo() : savedLogoUrl;
+            updates.logoUrl = logoUrl;
+        }
         if (step === 3 && platform) updates.platform = platform;
         if (step === 4) updates.subpages = selectedSubpages;
         if (step === 5) {
             if (budget) updates.estimatedBudget = budget;
-            if (paymentPlan) updates.paymentPlan = paymentPlan;
+            if (paymentPlan) updates.requestedPaymentPlan = paymentPlan;
         }
         if (step === 6 && maintenance) updates.maintenancePlan = maintenance;
         if (Object.keys(updates).length > 0) {
-            await updateDoc(doc(db, 'users', userId, 'projects', projectId), updates).catch(console.error);
+            await updateDoc(doc(db, 'users', userId, 'projects', projectId), updates);
+            if ('logoUrl' in updates) { setSavedLogoUrl(updates.logoUrl); setLogoPreview(updates.logoUrl); setLogoFile(null); }
         }
     };
 
@@ -193,40 +208,62 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
             fd.append('upload_preset', 'Unsigned Presets');
             const res = await fetch('https://api.cloudinary.com/v1_1/dldxkfbz4/image/upload', { method: 'POST', body: fd });
             const data = await res.json();
-            return data.secure_url || null;
-        } catch { return null; }
+            if (!res.ok || !data.secure_url) throw new Error('Logo upload failed.');
+            return data.secure_url;
+        }
         finally { setLogoUploading(false); }
     };
 
     const handleNext = async () => {
-        await saveCurrentStep();
-        if (step < TOTAL_STEPS) navigate(step + 1);
-        else await handleFinish();
+        if (savingStep || submitting) return;
+        setSavingStep(true); setSaveError('');
+        try {
+            await saveCurrentStep();
+            if (step < TOTAL_STEPS) navigate(step + 1);
+            else await handleFinish();
+        } catch { setSaveError('Your changes could not be saved. Please try again.'); }
+        finally { setSavingStep(false); }
     };
-
     const handleSkip = () => {
-        if (step < TOTAL_STEPS) navigate(step + 1);
-        else handleFinish();
+        if (!savingStep && !submitting && step < TOTAL_STEPS) navigate(step + 1);
+    };
+    const handleSaveExit = async () => {
+        if (savingStep || submitting) return;
+        setSavingStep(true); setSaveError('');
+        try {
+            await saveCurrentStep();
+            if (logoFile && step !== 2) {
+                const logoUrl = await uploadLogo();
+                await updateDoc(doc(db, 'users', userId, 'projects', projectId), { logoUrl });
+            }
+            router.push('/dashboard/projects');
+        } catch { setSaveError('Your changes could not be saved. Please try again.'); }
+        finally { setSavingStep(false); }
     };
 
     const handleFinish = async () => {
-        setSubmitting(true);
+        if (submitting) return;
+        setSubmitting(true); setSaveError('');
         try {
             let logoUrl: string | null = savedLogoUrl;
             if (logoFile) logoUrl = await uploadLogo();
-            await updateDoc(doc(db, 'users', userId, 'projects', projectId), {
+            const batch = writeBatch(db);
+            batch.update(doc(db, 'users', userId, 'projects', projectId), {
                 ...(dueDate && dueDate !== 'custom' && { dueDate }),
-                ...(logoUrl && { logoUrl }),
+                logoUrl,
                 ...(platform && { platform }),
                 subpages: selectedSubpages,
                 ...(budget && { estimatedBudget: budget }),
-                ...(paymentPlan && { paymentPlan }),
+                ...(paymentPlan && { requestedPaymentPlan: paymentPlan }),
                 ...(maintenance && { maintenancePlan: maintenance }),
-                setupComplete: true,
+                setupComplete: true, approval: 'Pending',
             });
+            queueAdminNotification(batch, 'New project request', `${projectName || 'A new project'} is ready for review.`, `/dashboard/projects/${projectId}?userId=${userId}`, 'new_project', `project-${projectId}`);
+            await batch.commit();
             router.push(`/dashboard/projects/${projectId}?userId=${userId}&projectId=${projectId}`);
         } catch (err) {
-            console.error(err);
+            setSaveError('We could not submit your project. Check your connection and try again; your choices are still here.');
+        } finally {
             setSubmitting(false);
         }
     };
@@ -269,6 +306,8 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
         color: textColor,
     };
 
+    if (loadFailed) return <main className="DashboardBackgroundGradient p-8"><p role="alert">{saveError}</p><button onClick={() => setLoadAttempt(n => n + 1)} className="underline mr-4">Retry</button><Link href="/dashboard/projects">Back to projects</Link></main>;
+
     if (initialLoading) {
         return (
             <div className="min-h-screen DashboardBackgroundGradient flex items-center justify-center">
@@ -287,7 +326,7 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
                 <Link href="/dashboard/projects" className="relative w-[100px]">
                     <Image
                         src={isDark ? '/Lucidify white logo.png' : '/Lucidify black logo.png'}
-                        alt="Lucidify" layout="responsive" width={0} height={0}
+                        alt="Lucidify" width={160} height={48}
                     />
                 </Link>
 
@@ -295,16 +334,17 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
                     <span className="text-[13px] hidden sm:block" style={{ color: mutedColor }}>
                         Setting up: <span className="font-medium" style={{ color: textColor }}>{projectName || 'Your Project'}</span>
                     </span>
-                    <Link
-                        href="/dashboard/projects"
+                    <button
+                        onClick={handleSaveExit} disabled={savingStep || submitting}
                         className="text-[13px] px-[14px] h-[34px] rounded-[10px] flex items-center transition-opacity hover:opacity-70"
                         style={{ background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)', color: mutedColor }}
                     >
                         Save & exit
-                    </Link>
+                    </button>
                 </div>
             </div>
 
+            {saveError && <div role="alert" className="DashboardNotice mx-6">{saveError}</div>}
             {/* ── Progress segments ── */}
             <div className="flex gap-[5px] px-[24px] sm:px-[48px] mb-[8px]">
                 {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
@@ -447,6 +487,8 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
                                     <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                                         const file = e.target.files?.[0];
                                         if (!file) return;
+                                        if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) { setSaveError('Choose an image smaller than 10 MB.'); return; }
+                                        setSaveError('');
                                         setLogoFile(file);
                                         setLogoPreview(URL.createObjectURL(file));
                                     }} />
@@ -609,7 +651,7 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
                     <div className="flex items-center gap-[10px]">
                         {step > 1 && (
                             <button
-                                onClick={() => navigate(step - 1)}
+                                onClick={() => navigate(step - 1)} disabled={savingStep || submitting || !visible}
                                 className="h-[50px] px-[20px] rounded-[14px] text-[14px] font-medium transition-opacity hover:opacity-70 flex-shrink-0"
                                 style={{
                                     background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
@@ -623,7 +665,7 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
 
                         {current.optional && (
                             <button
-                                onClick={handleSkip}
+                                onClick={handleSkip} disabled={savingStep || submitting || !visible}
                                 className="h-[50px] px-[20px] rounded-[14px] text-[14px] font-medium transition-opacity hover:opacity-70 flex-shrink-0"
                                 style={{
                                     background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
@@ -637,7 +679,7 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
 
                         <button
                             onClick={handleNext}
-                            disabled={!canProceed() || submitting || logoUploading}
+                            disabled={!canProceed() || submitting || savingStep || logoUploading || !visible}
                             className="flex-1 h-[50px] rounded-[14px] text-[15px] font-semibold transition-all hover:opacity-90 disabled:opacity-35 active:scale-[0.98]"
                             style={{
                                 background: 'radial-gradient(ellipse 80% 110% at 50% -5%, #251470 0%, #3e28a8 40%, #5c3ecc 70%, #7255e0 100%)',

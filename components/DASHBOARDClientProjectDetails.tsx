@@ -1,9 +1,12 @@
 "use client";
 
+import { paymentCount, paidCount, getPaid, getTotalCost, getRemaining } from '@/utils/billing';
 import { useEffect, useState } from 'react';
 import { collection, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
+import { useLiveProject } from '@/hooks/useLiveProject';
 import Link from 'next/link';
+import ProjectBrief, { ProjectBriefData } from './ProjectBrief';
 import Image from 'next/image';
 import DashboardClientSideNav from './DashboardClientSideNav';
 import DashboardTopBar from './DashboardTopBar';
@@ -14,7 +17,7 @@ interface DASHBOARDClientProjectDetailsProps {
     projectId: string;
 }
 
-interface ProjectDetails {
+interface ProjectDetails extends ProjectBriefData {
     projectName?: string;
     dueDate?: string;
     dateCreated?: string;
@@ -53,34 +56,15 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
     const { theme } = useTheme();
     const isDark = theme === 'dark';
 
-    const [projectDetails, setProjectDetails] = useState<ProjectDetails | null>(null);
-    const [loading, setLoading] = useState<boolean>(true);
-    const [error, setError] = useState<string | null>(null);
-    const [paymentType, setPaymentType] = useState<'week' | 'full'>('week');
+    const { projectDetails, setProjectDetails, loading, error } = useLiveProject<ProjectDetails>(userId, projectId);
     const [designCount, setDesignCount] = useState(0);
-    const [autoPayLoading, setAutoPayLoading] = useState(false);
 
     useEffect(() => {
-        const fetchProjectDetails = async () => {
-            if (!userId || !projectId) return;
-            try {
-                const projectDocRef = doc(db, 'users', userId, 'projects', projectId);
-                const projectDoc = await getDoc(projectDocRef);
-                if (projectDoc.exists()) {
-                    setProjectDetails(projectDoc.data() as ProjectDetails);
-                } else {
-                    setError('Project not found.');
-                }
-                const sectionSnap = await getDocs(collection(db, 'users', userId, 'projects', projectId, 'section web designs'));
-                const fullSnap = await getDocs(collection(db, 'users', userId, 'projects', projectId, 'full-page web designs'));
-                setDesignCount(sectionSnap.size + fullSnap.size);
-            } catch {
-                setError('Failed to fetch project details.');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchProjectDetails();
+        let active = true;
+        Promise.all(['section web designs', 'full-page web designs'].map(name => getDocs(collection(db, 'users', userId, 'projects', projectId, name))))
+            .then(results => { if (active) setDesignCount(results.reduce((total, snapshot) => total + snapshot.size, 0)); })
+            .catch(() => { if (active) setDesignCount(0); });
+        return () => { active = false; };
     }, [userId, projectId]);
 
     const {
@@ -89,15 +73,7 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
         weeksPaid, paymentPlan, paymentAmount, paymentStartDate, autoPay,
     } = projectDetails || {};
 
-    const handleAutoPayButton = async (newAutoPay: boolean) => {
-        if (!userId || !projectId || autoPayLoading) return;
-        setAutoPayLoading(true);
-        try {
-            await updateDoc(doc(db, 'users', userId, 'projects', projectId), { autoPay: newAutoPay });
-            setProjectDetails(prev => ({ ...prev, autoPay: newAutoPay }));
-        } catch { }
-        finally { setAutoPayLoading(false); }
-    };
+
 
     // Theme tokens
     const textColor = isDark ? '#ffffff' : '#111111';
@@ -142,13 +118,13 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
     );
 
     // Payment math
-    const safeWeeksPaid = weeksPaid || 0;
-    const safePaymentAmount = paymentAmount || 0;
-    const numericPaymentPlan = typeof paymentPlan === 'number' ? paymentPlan : 0;
+    const safeWeeksPaid = paidCount(projectDetails || {});
+    const safePaymentAmount = typeof paymentAmount === 'number' && Number.isFinite(paymentAmount) ? Math.max(0, paymentAmount) : 0;
+    const numericPaymentPlan = paymentCount(projectDetails || {});
     const safePaymentPlan = numericPaymentPlan;
-    const amountPaid = safeWeeksPaid * safePaymentAmount;
-    const totalPayment = safePaymentPlan * safePaymentAmount;
-    const remainingPayment = totalPayment - amountPaid;
+    const amountPaid = getPaid(projectDetails || {});
+    const totalPayment = getTotalCost(projectDetails || {});
+    const remainingPayment = getRemaining(projectDetails || {});
     const paymentProgress = totalPayment > 0 ? amountPaid / totalPayment : 0;
     const strokeDashOffset = 450 - paymentProgress * 450;
 
@@ -160,11 +136,13 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
     const logoSrc = logoUrl || logoAttachment;
 
     // Payment status config
-    const psConfig = paymentStatus === 'Overdue'
-        ? { bg: 'rgba(241,63,94,0.12)', border: 'rgba(241,63,94,0.30)', text: '#f87171', dot: '#ef4444', label: 'Overdue' }
-        : paymentStatus === 'Not Started'
-        ? { bg: 'rgba(241,158,63,0.12)', border: 'rgba(241,158,63,0.30)', text: '#fbbf24', dot: '#f59e0b', label: 'Not Started' }
-        : { bg: 'rgba(44,173,109,0.12)', border: 'rgba(44,173,109,0.30)', text: '#4ade80', dot: '#22c55e', label: 'On Time' };
+    const psConfig = paymentStatus === 'Paid'
+        ? { bg: 'rgba(114,92,247,0.12)', border: 'rgba(114,92,247,0.30)', text: isDark ? '#bcb2ff' : '#5940b5', dot: '#725cf7', label: 'Paid' }
+        : paymentStatus === 'Overdue'
+        ? { bg: 'rgba(241,63,94,0.12)', border: 'rgba(241,63,94,0.30)', text: isDark ? '#f87171' : '#b32d3a', dot: '#ef4444', label: 'Overdue' }
+        : !paymentStatus || paymentStatus === 'Not Started'
+        ? { bg: 'rgba(241,158,63,0.12)', border: 'rgba(241,158,63,0.30)', text: isDark ? '#fbbf24' : '#805900', dot: '#f59e0b', label: 'Not Started' }
+        : { bg: 'rgba(44,173,109,0.12)', border: 'rgba(44,173,109,0.30)', text: isDark ? '#4ade80' : '#15703f', dot: '#22c55e', label: 'On Time' };
 
     return (
         <div className="flex flex-col xl:flex-row h-screen DashboardBackgroundGradient overflow-hidden">
@@ -184,10 +162,11 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
                                 className={tabBase} style={inactiveTabStyle}>Progress</Link>
                             <Link href={`/dashboard/projects/${projectId}/uploads?projectId=${projectId}&userId=${userId}`}
                                 className={tabBase} style={inactiveTabStyle}>Uploads</Link>
-                            <button disabled className={tabBase} style={disabledTabStyle}>Analytics</button>
+
                         </div>
                     </div>
 
+                    {projectDetails && <ProjectBrief project={projectDetails} />}
                     {/* Main Grid */}
                     <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-[20px]">
 
@@ -367,85 +346,13 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
 
                                 <div className="h-[1px]" style={{ background: dividerColor }} />
 
-                                {/* Auto-pay toggle */}
-                                <div>
-                                    <div className="flex items-center justify-between mb-[12px]">
-                                        <div>
-                                            <p className="text-[13px] font-medium">Auto-pay</p>
-                                            <p className="text-[11px] mt-[2px]" style={{ color: mutedColor }}>
-                                                {autoPay ? 'Payments process automatically' : 'Manual payment required'}
-                                            </p>
-                                        </div>
-                                        {/* Toggle switch */}
-                                        <button
-                                            onClick={() => handleAutoPayButton(!autoPay)}
-                                            disabled={autoPayLoading}
-                                            className="relative flex-shrink-0 w-[48px] h-[26px] rounded-full transition-all duration-300"
-                                            style={{
-                                                background: autoPay
-                                                    ? 'linear-gradient(135deg, #725CF7, #6265F0)'
-                                                    : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'),
-                                                boxShadow: autoPay ? '0 2px 10px rgba(114,92,247,0.40)' : 'none',
-                                                border: autoPay ? 'none' : subtleBorder,
-                                            }}
-                                        >
-                                            <div
-                                                className="absolute top-[3px] w-[20px] h-[20px] rounded-full bg-white transition-all duration-300"
-                                                style={{
-                                                    left: autoPay ? '25px' : '3px',
-                                                    boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
-                                                }}
-                                            />
-                                        </button>
-                                    </div>
+                                <div className="text-[13px] leading-relaxed">
+                                    <p className="font-medium">Payment arrangements</p>
+                                    <p style={{ color: mutedColor }}>Contact Lucidify to arrange your payment. This dashboard does not charge your account automatically.</p>
+                                    <Link href="/dashboard/messages" className="underline mt-2 inline-block">Ask about billing</Link>
                                 </div>
 
-                                {/* Pay now */}
-                                <div className="rounded-[16px] p-[4px]" style={{ background: subtleBg, border: subtleBorder }}>
-                                    {/* Week / Full segmented control */}
-                                    <div className="flex rounded-[13px] p-[3px] mb-[12px]" style={{ background: isDark ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.05)' }}>
-                                        {(['week', 'full'] as const).map(t => (
-                                            <button
-                                                key={t}
-                                                onClick={() => setPaymentType(t)}
-                                                className="flex-1 h-[32px] flex items-center justify-center rounded-[10px] text-[12px] font-medium transition-all"
-                                                style={paymentType === t ? {
-                                                    background: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.90)',
-                                                    color: textColor,
-                                                    boxShadow: isDark ? '0 1px 4px rgba(0,0,0,0.4)' : '0 1px 6px rgba(0,0,0,0.12)',
-                                                } : {
-                                                    background: 'transparent',
-                                                    color: mutedColor,
-                                                }}
-                                            >
-                                                {t === 'week' ? 'This week' : 'Pay in full'}
-                                            </button>
-                                        ))}
-                                    </div>
 
-                                    {/* Amount + button */}
-                                    <div className="flex items-center gap-[10px] px-[4px] pb-[4px]">
-                                        <div className="flex-1">
-                                            <p className="text-[10px] uppercase tracking-wider mb-[2px]" style={{ color: mutedColor }}>Amount</p>
-                                            <p className="text-[20px] font-bold" style={{ color: textColor }}>
-                                                ${paymentType === 'week' ? safePaymentAmount : remainingPayment}
-                                            </p>
-                                        </div>
-                                        <button
-                                            disabled={paymentStatus === 'Not Started'}
-                                            className="flex items-center gap-[8px] px-[20px] h-[44px] rounded-[12px] text-white text-[13px] font-semibold transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
-                                            style={{
-                                                background: paymentStatus === 'Not Started'
-                                                    ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)')
-                                                    : 'linear-gradient(135deg, #725CF7, #6265F0)',
-                                                boxShadow: paymentStatus === 'Not Started' ? 'none' : '0 4px 16px rgba(114,92,247,0.40)',
-                                                color: paymentStatus === 'Not Started' ? mutedColor : '#ffffff',
-                                            }}
-                                        >
-                                            Pay now
-                                        </button>
-                                    </div>
-                                </div>
 
                             </div>
                         </div>

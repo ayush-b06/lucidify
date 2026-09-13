@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import React from 'react';
+import { useLiveProject } from '@/hooks/useLiveProject';
+import { STAGES, STAGE_DETAILS } from '@/utils/projectProgress';
 import Link from 'next/link';
 import Image from 'next/image';
 import DashboardClientSideNav from '@/components/DashboardClientSideNav';
@@ -31,83 +31,8 @@ interface ProjectDetails {
     [key: string]: any;
 }
 
-const STAGES = [
-    { id: 1, label: 'Planning', icon: '🗺️' },
-    { id: 2, label: 'Designing', icon: '🎨' },
-    { id: 3, label: 'Developing', icon: '⚙️' },
-    { id: 4, label: 'Launching', icon: '🚀' },
-    { id: 5, label: 'Maintaining', icon: '🛡️' },
-];
-
-const STAGE_DETAILS: Record<number, {
-    headline: string;
-    description: string;
-    milestones: string[];
-    nextUp: string[];
-}> = {
-    1: {
-        headline: 'Laying the foundation',
-        description: "We're defining your project's goals, technical requirements, and timeline. This stage sets the direction for everything that follows.",
-        milestones: [
-            'Kickoff call completed',
-            'Project requirements documented',
-            'Scope & deliverables agreed',
-            'Timeline & milestones set',
-        ],
-        nextUp: ['Wireframe delivery', 'Brand asset review', 'Design phase kickoff'],
-    },
-    2: {
-        headline: 'Designing your vision',
-        description: "Our designers are crafting the visual identity and UI/UX of your website. You'll be reviewing mockups and providing feedback in this phase.",
-        milestones: [
-            'Brand direction approved',
-            'Homepage mockup delivered',
-            'Inner pages mockup delivered',
-            'Final design revisions approved',
-        ],
-        nextUp: ['Development handoff', 'Content gathering', 'Development phase kickoff'],
-    },
-    3: {
-        headline: 'Building your website',
-        description: "Developers are turning the approved designs into a fully functional website. This includes frontend, backend integrations, and quality testing.",
-        milestones: [
-            'Development environment set up',
-            'Homepage built & responsive',
-            'All pages coded & linked',
-            'Forms, integrations & CMS set up',
-            'Cross-browser & mobile testing',
-        ],
-        nextUp: ['Client review session', 'Final QA pass', 'Launch preparation'],
-    },
-    4: {
-        headline: 'Preparing for launch',
-        description: "Your website is nearly live! We're handling domain configuration, hosting setup, final testing, and performance optimizations before going live.",
-        milestones: [
-            'Final client review completed',
-            'Domain & DNS configured',
-            'SSL certificate active',
-            'Performance & SEO optimizations',
-            'Website live 🎉',
-        ],
-        nextUp: ['Go-live announcement', 'Analytics setup', 'Handover & training'],
-    },
-    5: {
-        headline: 'Your website is live',
-        description: "Congratulations — your website is live and in the world! We're actively monitoring performance, applying updates, and handling any issues that arise.",
-        milestones: [
-            'Website successfully launched',
-            'Google Analytics connected',
-            'Uptime monitoring active',
-            'Monthly performance report',
-        ],
-        nextUp: ['Ongoing support & updates', 'SEO growth review', 'Feature enhancements'],
-    },
-};
-
 const DASHBOARDClientProjectDetailsProgress = ({ userId, projectId }: DASHBOARDClientProjectDetailsProgressProps) => {
-    const [projectDetails, setProjectDetails] = useState<ProjectDetails | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const { projectDetails, loading, error } = useLiveProject<ProjectDetails>(userId, projectId);
 
     const { theme } = useTheme();
     const isDark = theme === 'dark';
@@ -130,27 +55,6 @@ const DASHBOARDClientProjectDetailsProgress = ({ userId, projectId }: DASHBOARDC
         border: isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(0,0,0,0.07)',
         borderRadius: '13px', padding: '3px', display: 'inline-flex', gap: '2px',
     };
-
-    useEffect(() => {
-        const fetchProjectDetails = async () => {
-            if (!userId || !projectId) return;
-            try {
-                const projectDocRef = doc(db, 'users', userId, 'projects', projectId);
-                const projectDoc = await getDoc(projectDocRef);
-                if (projectDoc.exists()) {
-                    setProjectDetails(projectDoc.data() as ProjectDetails);
-                } else {
-                    setError('Project not found.');
-                }
-            } catch (err) {
-                console.error('Error fetching project details:', err);
-                setError('Failed to fetch project details.');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchProjectDetails();
-    }, [userId, projectId]);
 
     if (loading) {
         return (
@@ -177,7 +81,7 @@ const DASHBOARDClientProjectDetailsProgress = ({ userId, projectId }: DASHBOARDC
     const { projectName, progress, status, approval, dueDate, dateCreated, recentActivity, logoAttachment, stageMilestones } = projectDetails;
 
     const currentStage = status || 1;
-    const currentProgress = Number(progress) || 0;
+    const currentProgress = Math.min(100, Math.max(0, Number(progress) || 0));
     const stageData = STAGE_DETAILS[currentStage] || STAGE_DETAILS[1];
     const stageName = STAGES.find(s => s.id === currentStage)?.label || 'Planning';
     // Read milestone completion from Firestore (set by admin), fall back to all false
@@ -207,7 +111,7 @@ const DASHBOARDClientProjectDetailsProgress = ({ userId, projectId }: DASHBOARDC
                                 className={tabBase} style={activeTabStyle}>Progress</Link>
                             <Link href={`/dashboard/projects/${projectId}/uploads?projectId=${projectId}&userId=${userId}`}
                                 className={tabBase} style={inactiveTabStyle}>Uploads</Link>
-                            <button disabled className={tabBase} style={disabledTabStyle}>Analytics</button>
+
                         </div>
                     </div>
 
@@ -239,7 +143,7 @@ const DASHBOARDClientProjectDetailsProgress = ({ userId, projectId }: DASHBOARDC
 
                         {/* Full progress bar */}
                         <div className="mt-[24px]">
-                            <div className="h-[8px] rounded-full" style={{ background: trackBg }}>
+                            <div role="progressbar" aria-label="Build progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={currentProgress} className="h-[8px] rounded-full" style={{ background: trackBg }}>
                                 <div
                                     className="h-full rounded-full"
                                     style={{

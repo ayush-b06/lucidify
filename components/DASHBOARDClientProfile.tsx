@@ -35,10 +35,10 @@ const Field = ({
     onChange: (field: keyof UserProfile, val: string) => void;
 }) => (
     <div className="flex flex-col gap-[6px]">
-        <label className="text-[11px] opacity-40 uppercase tracking-wider font-light">{label}</label>
+        <label htmlFor={field} className="text-[11px] opacity-40 uppercase tracking-wider font-light">{label}</label>
         {isEditing && !readOnly ? (
             multiline ? (
-                <textarea
+                <textarea id={field}
                     value={draft?.[field] as string ?? ''}
                     onChange={e => onChange(field, e.target.value)}
                     rows={3}
@@ -46,7 +46,7 @@ const Field = ({
                     placeholder={`Add a ${label.toLowerCase()}...`}
                 />
             ) : (
-                <input
+                <input id={field}
                     type="text"
                     value={draft?.[field] as string ?? ''}
                     onChange={e => onChange(field, e.target.value)}
@@ -80,6 +80,8 @@ const DASHBOARDClientProfile = () => {
     const [isAvatarOpen, setIsAvatarOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [savedMsg, setSavedMsg] = useState(false);
+    const [error, setError] = useState('');
+    const [attempt, setAttempt] = useState(0);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -103,23 +105,24 @@ const DASHBOARDClientProfile = () => {
                         bio: d.bio || DEFAULT_BIO,
                     });
                 }
-            } catch (e) { console.error(e); }
+            } catch (e) { setError('Could not load or save your profile. Please try again.'); }
             finally { setLoading(false); }
         };
         fetchProfile();
-    }, []);
+    }, [attempt]);
 
-    const startEdit = () => { setDraft({ ...profile }); setIsEditing(true); };
+    const startEdit = () => { setError(''); setDraft({ ...profile }); setIsEditing(true); };
     const cancelEdit = () => { setIsEditing(false); setDraft(null); };
 
     const saveChanges = async () => {
-        if (!draft) return;
+        if (!draft || saving) return;
+        if (!draft.firstName.trim()) { setError('Enter your first name before saving.'); return; }
         const user = auth.currentUser;
         if (!user) return;
-        setSaving(true);
+        setSaving(true); setError('');
         try {
             await updateDoc(doc(db, 'users', user.uid), {
-                firstName: draft.firstName,
+                firstName: draft.firstName.trim(),
                 lastName: draft.lastName,
                 phoneNumber: draft.phoneNumber,
                 companyName: draft.companyName,
@@ -133,13 +136,14 @@ const DASHBOARDClientProfile = () => {
             setDraft(null);
             setSavedMsg(true);
             setTimeout(() => setSavedMsg(false), 2500);
-        } catch (e) { console.error(e); }
+        } catch (e) { setError('Could not load or save your profile. Please try again.'); }
         finally { setSaving(false); }
     };
 
     const saveAvatar = async (av: string) => {
         const user = auth.currentUser;
-        if (!user) return;
+        if (!user || saving) return;
+        setSaving(true); setError('');
         try {
             await updateDoc(doc(db, 'users', user.uid), { selectedAvatar: av });
             setProfile(prev => ({ ...prev, selectedAvatar: av }));
@@ -147,7 +151,8 @@ const DASHBOARDClientProfile = () => {
             setIsAvatarOpen(false);
             setSavedMsg(true);
             setTimeout(() => setSavedMsg(false), 2500);
-        } catch (e) { console.error(e); }
+        } catch (e) { setError('Could not load or save your profile. Please try again.'); }
+        finally { setSaving(false); }
     };
 
     const handleFieldChange = (field: keyof UserProfile, val: string) =>
@@ -217,6 +222,7 @@ const DASHBOARDClientProfile = () => {
 
                 <div className="flex-1 flex flex-col pt-[60px] xl:pt-0 min-h-0 overflow-hidden">
                     <DashboardTopBar title="Profile" />
+                {error && <div role="alert" className="DashboardNotice">{error} {!isEditing && <button onClick={() => { setError(''); setAttempt(n => n + 1); }}>Retry</button>}</div>}
 
                     {/* Scrollable Content */}
                     <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">

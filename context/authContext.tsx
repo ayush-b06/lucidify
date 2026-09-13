@@ -19,28 +19,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const auth = getAuth(app);
 
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        // Set session persistence to local (i.e., stay signed in until manually logged out)
-        await setPersistence(auth, browserLocalPersistence);
-
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-          if (user) {
-            setUser(user); // Firebase User object is now set correctly
-          } else {
-            setUser(null); // Set null if the user is not logged in
-          }
-          setLoading(false);
-        });
-
-        return () => unsubscribe();
-      } catch (error) {
-        console.error("Error setting up Firebase Auth", error);
-        setLoading(false);
-      }
-    };
-
-    initAuth();
+    // A storage-persistence failure must not prevent observing the session.
+    void setPersistence(auth, browserLocalPersistence).catch(error => {
+      console.error("Unable to persist Firebase Auth", error);
+    });
+    const unsubscribe = onAuthStateChanged(auth, user => {
+      setUser(user);
+      setLoading(false);
+    }, error => {
+      console.error("Unable to observe Firebase Auth", error);
+      setLoading(false);
+    });
+    return unsubscribe;
   }, [auth]);
 
   return (

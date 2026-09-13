@@ -1,5 +1,6 @@
 "use client";
 
+import { getTotalCost, getPaid, getRemaining, paymentCount, paidCount } from '@/utils/billing';
 import { useEffect, useState } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
@@ -27,14 +28,6 @@ const PLAN_LABELS: Record<number, string> = {
     5: '5-Week Plan',
 };
 
-const getTotalCost = (p: Project) => {
-    const plan = p.paymentPlan ?? 0;
-    const amount = p.paymentAmount ?? 0;
-    if (!plan || !amount) return 0;
-    return plan === 1 ? amount : amount * plan;
-};
-const getPaid = (p: Project) => (p.weeksPaid ?? 0) * (p.paymentAmount ?? 0);
-const getRemaining = (p: Project) => Math.max(0, getTotalCost(p) - getPaid(p));
 const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const StatusBadge = ({ status }: { status?: string }) => {
@@ -50,6 +43,8 @@ const StatusBadge = ({ status }: { status?: string }) => {
 
 const DASHBOARDClientTransactions = () => {
     const [projects, setProjects] = useState<Project[]>([]);
+    const [error, setError] = useState('');
+    const [attempt, setAttempt] = useState(0);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -57,11 +52,11 @@ const DASHBOARDClientTransactions = () => {
         if (!user) return;
         getDocs(collection(db, 'users', user.uid, 'projects'))
             .then(snap => setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project))))
-            .catch(console.error)
+            .catch(() => setError('Could not load payments. Please retry.'))
             .finally(() => setLoading(false));
-    }, []);
+    }, [attempt]);
 
-    const active = projects.filter(p => (p.paymentPlan ?? 0) > 0 && (p.paymentAmount ?? 0) > 0);
+    const active = projects.filter(p => getTotalCost(p) > 0);
     const totalCost = active.reduce((s, p) => s + getTotalCost(p), 0);
     const totalPaid = active.reduce((s, p) => s + getPaid(p), 0);
     const totalRemaining = active.reduce((s, p) => s + getRemaining(p), 0);
@@ -72,6 +67,7 @@ const DASHBOARDClientTransactions = () => {
 
             <div className="flex-1 flex flex-col pt-[60px] xl:pt-0 min-h-0 overflow-hidden">
                 <DashboardTopBar title="Transactions" />
+                {error && <div role="alert" className="DashboardNotice">{error} <button onClick={() => { setError(''); setAttempt(n => n + 1); }}>Retry</button></div>}
 
                 {/* Scrollable Content */}
                 <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">

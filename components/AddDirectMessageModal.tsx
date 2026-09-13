@@ -1,7 +1,9 @@
 "use client";
+import { useDialog } from '@/hooks/useDialog';
 
-import { useState } from 'react';
-import { collection, doc, getDoc, getDocs, query, setDoc, Timestamp, where } from 'firebase/firestore';
+import { useState, useRef, useEffect } from 'react';
+import { collection, doc, getDoc, getDocs, query, limit, runTransaction, Timestamp, where } from 'firebase/firestore';
+import { ADMIN_EMAIL } from '@/utils/notifications';
 import { auth, db } from '../firebaseConfig';
 import Image from 'next/image';
 
@@ -20,16 +22,21 @@ interface AddDirectMessageModalProps {
 }
 
 const AddDirectMessageModal = ({ onClose, onConversationCreated }: AddDirectMessageModalProps) => {
+    const searchVersion = useRef(0);
+    const [error, setError] = useState('');
+    useEffect(() => () => { searchVersion.current++; }, []);
     const [emailInput, setEmailInput] = useState('');
     const [status, setStatus] = useState<'idle' | 'loading' | 'found' | 'notFound' | 'exists' | 'creating'>('idle');
     const [foundUser, setFoundUser] = useState<UserProfile | null>(null);
 
     const handleSearch = async () => {
         const trimmed = emailInput.trim().toLowerCase();
-        if (!trimmed) return;
+        if (!trimmed || status === 'creating') return;
+        const version = ++searchVersion.current; setError('');
 
         const me = auth.currentUser;
         if (!me) return;
+        if (trimmed === ADMIN_EMAIL) { setError('Use your pinned Lucidify conversation to contact the team.'); setStatus('idle'); setFoundUser(null); return; }
 
         if (trimmed === me.email?.toLowerCase()) {
             setStatus('notFound');
@@ -41,8 +48,9 @@ const AddDirectMessageModal = ({ onClose, onConversationCreated }: AddDirectMess
         setFoundUser(null);
 
         try {
-            const q = query(collection(db, 'users'), where('email', '==', trimmed));
+            const q = query(collection(db, 'users'), where('email', '==', trimmed), limit(1));
             const snap = await getDocs(q);
+            if (version !== searchVersion.current) return;
 
             if (snap.empty) {
                 setStatus('notFound');
@@ -64,6 +72,7 @@ const AddDirectMessageModal = ({ onClose, onConversationCreated }: AddDirectMess
             const convoId = [me.uid, profile.uid].sort().join('_');
             const dmRef = doc(db, 'directMessages', convoId);
             const dmSnap = await getDoc(dmRef);
+            if (version !== searchVersion.current) return;
 
             if (dmSnap.exists()) {
                 setFoundUser(profile);
@@ -74,16 +83,16 @@ const AddDirectMessageModal = ({ onClose, onConversationCreated }: AddDirectMess
             setFoundUser(profile);
             setStatus('found');
         } catch (err) {
-            console.error('Error searching for user:', err);
-            setStatus('notFound');
+            if (version !== searchVersion.current) return;
+            setError('Could not search users. Please try again.'); setStatus('idle');
         }
     };
 
     const handleStartChat = async () => {
         const me = auth.currentUser;
-        if (!me || !foundUser) return;
+        if (!me || !foundUser || status === 'creating') return;
 
-        setStatus('creating');
+        setStatus('creating'); setError('');
 
         try {
             // Fetch my own profile
@@ -93,8 +102,11 @@ const AddDirectMessageModal = ({ onClose, onConversationCreated }: AddDirectMess
             const convoId = [me.uid, foundUser.uid].sort().join('_');
             const now = Timestamp.now();
 
-            // Create shared DM conversation
-            await setDoc(doc(db, 'directMessages', convoId), {
+            // Read before creating so repeated opens never overwrite the shared thread.
+            await runTransaction(db, async transaction => {
+            const ref = doc(db, 'directMessages', convoId);
+            const existing = await transaction.get(ref);
+            if (!existing.exists()) transaction.set(ref, {
                 participants: [me.uid, foundUser.uid],
                 participantProfiles: {
                     [me.uid]: {
@@ -119,19 +131,20 @@ const AddDirectMessageModal = ({ onClose, onConversationCreated }: AddDirectMess
             });
 
             // Add ref to both users' dmConversations subcollection
-            await setDoc(doc(db, 'users', me.uid, 'dmConversations', convoId), {
+            transaction.set(doc(db, 'users', me.uid, 'dmConversations', convoId), {
                 otherUserId: foundUser.uid,
                 createdAt: now,
             });
-            await setDoc(doc(db, 'users', foundUser.uid, 'dmConversations', convoId), {
+            transaction.set(doc(db, 'users', foundUser.uid, 'dmConversations', convoId), {
                 otherUserId: me.uid,
                 createdAt: now,
             });
 
+            });
             onConversationCreated(convoId);
             onClose();
         } catch (err) {
-            console.error('Error creating DM:', err);
+            setError('Could not start this conversation. Please try again.');
             setStatus('found');
         }
     };
@@ -145,13 +158,14 @@ const AddDirectMessageModal = ({ onClose, onConversationCreated }: AddDirectMess
         onClose();
     };
 
+    const dialogRef = useDialog<HTMLDivElement>(true, onClose, status === 'creating');
     return (
         <div
             className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-[12px] sm:p-[20px]"
-            onClick={onClose}
+            onClick={() => { if (status !== 'creating') onClose(); }}
         >
             <div
-                className="w-full max-w-[460px] BlackGradient ContentCardShadow rounded-[28px] px-[28px] py-[28px] flex flex-col gap-[20px]"
+                ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="New message" className="DashboardDialog w-full max-w-[460px] BlackGradient ContentCardShadow rounded-[28px] px-[28px] py-[28px] flex flex-col gap-[20px]"
                 onClick={e => e.stopPropagation()}
             >
                 {/* Header */}
@@ -161,24 +175,25 @@ const AddDirectMessageModal = ({ onClose, onConversationCreated }: AddDirectMess
                         <p className="text-[12px] opacity-40 mt-[2px]">Find a user by their email address</p>
                     </div>
                     <button
-                        onClick={onClose}
+                        onClick={() => { if (status !== 'creating') onClose(); }}
                         className="w-[32px] h-[32px] rounded-full BlackWithLightGradient ContentCardShadow flex items-center justify-center opacity-60 hover:opacity-100 text-[16px]"
                     >✕</button>
                 </div>
 
+                {error && <p role="alert" className="DashboardNotice">{error}</p>}
                 {/* Email input */}
                 <div className="flex gap-[10px]">
                     <input
                         type="email"
                         value={emailInput}
-                        onChange={e => { setEmailInput(e.target.value); setStatus('idle'); setFoundUser(null); }}
+                        disabled={status === 'creating'} aria-label="Recipient email" onChange={e => { searchVersion.current++; setError(''); setEmailInput(e.target.value); setStatus('idle'); setFoundUser(null); }}
                         onKeyDown={e => e.key === 'Enter' && handleSearch()}
                         placeholder="Enter email address..."
                         className="flex-1 bg-white/5 border border-white/10 rounded-[12px] px-[16px] py-[11px] text-[14px] font-light focus:outline-none focus:ring-1 focus:ring-[#725CF7] placeholder:opacity-30"
                     />
                     <button
                         onClick={handleSearch}
-                        disabled={status === 'loading' || !emailInput.trim()}
+                        disabled={status === 'loading' || status === 'creating' || !emailInput.trim()}
                         className="PopupAttentionGradient PopupAttentionShadow px-[18px] py-[11px] rounded-[12px] text-[13px] font-medium disabled:opacity-40 flex-shrink-0"
                     >
                         {status === 'loading' ? '...' : 'Search'}

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from 'react';
+import { subscribeUserProjects, subscribeAllProjects } from '@/utils/projectSubscriptions';
 import { getAuth } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
@@ -8,7 +9,6 @@ import DashboardClientSideNav from './DashboardClientSideNav';
 import Image from 'next/image';
 import Link from 'next/link';
 import DashboardTopBar from './DashboardTopBar';
-import { useTheme } from '@/context/themeContext';
 
 interface Project {
   uid: string;
@@ -26,14 +26,13 @@ interface Project {
 
 const DASHBOARDClientDashboard = () => {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [error, setError] = useState('');
+  const [attempt, setAttempt] = useState(0);
   const [dataLoading, setDataLoading] = useState(true);
   const [firstName, setFirstName] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const auth = getAuth();
   const router = useRouter();
-  const { setTheme } = useTheme();
-
-  useEffect(() => { setTheme('light'); }, []);
 
   const getFormattedDate = () => {
     const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -43,44 +42,18 @@ const DASHBOARDClientDashboard = () => {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
-      const user = auth.currentUser;
-      if (!user) { router.push('/login'); return; }
-
-      setUserId(user.uid);
-
-      try {
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) setFirstName(userDoc.data().firstName || null);
-
-        const projectsSnap = await getDocs(collection(db, 'users', user.uid, 'projects'));
-        const fetched: Project[] = [];
-        projectsSnap.forEach((pDoc) => {
-          const p = pDoc.data();
-          fetched.push({
-            uid: pDoc.id,
-            projectName: p.projectName || 'Unnamed Project',
-            progress: p.progress || '0',
-            approval: p.approval || 'Pending',
-            dueDate: p.dueDate || null,
-            recentActivity: p.recentActivity || null,
-            dateCreated: p.dateCreated || null,
-            paymentPlan: p.paymentPlan || 0,
-            weeksPaid: p.weeksPaid || 0,
-            status: p.status || 1,
-            logoAttachment: p.logoAttachment || null,
-          });
-        });
-        setProjects(fetched);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setDataLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [auth, router]);
+    const user = auth.currentUser;
+    if (!user) { router.push('/login'); return; }
+    let active = true;
+    setError(''); setDataLoading(true);
+    getDoc(doc(db, 'users', user.uid)).then(snapshot => { if (active && snapshot.exists()) setFirstName(snapshot.data().firstName || null); }).catch(() => { if (active) setError('Could not load your profile. Please retry.'); });
+    setUserId(user.uid);
+    const stop = subscribeUserProjects(user.uid, items => {
+      setProjects(items.filter(p => p.approval !== 'Cancelled').map(p => ({ ...p, approval: p.setupComplete === false ? 'Draft' : p.approval })));
+      setDataLoading(false);
+    }, () => { setError('Could not load dashboard data. Please retry.'); setDataLoading(false); });
+    return () => { active = false; stop(); };
+  }, [auth, router, attempt]);
 
   const activeProject = projects.find(p => p.approval === 'Approved') || projects[0] || null;
   const activeCount = projects.filter(p => p.approval === 'Approved').length;
@@ -98,6 +71,7 @@ const DASHBOARDClientDashboard = () => {
 
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-[60px] xl:pt-0">
         <DashboardTopBar title="Dashboard" />
+        {error && <div role="alert" className="DashboardNotice">{error} <button onClick={() => { setError(''); setAttempt(n => n + 1); }}>Retry</button></div>}
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-[30px] lg:px-[50px] py-[40px]">
@@ -202,7 +176,7 @@ const DASHBOARDClientDashboard = () => {
                     )}
 
                     <Link
-                      href={`/dashboard/projects/${activeProject.uid}?projectId=${activeProject.uid}&userId=${userId}`}
+                      href={`/dashboard/projects/${activeProject.uid}${activeProject.approval === 'Draft' ? '/setup' : ''}?projectId=${activeProject.uid}&userId=${userId}`}
                       className="PopupAttentionGradient PopupAttentionShadow text-[13px] font-medium px-[16px] py-[10px] rounded-[12px] text-center"
                     >
                       View Project Details →
@@ -234,7 +208,7 @@ const DASHBOARDClientDashboard = () => {
                   projects.map((project, i) => (
                     <Link
                       key={project.uid}
-                      href={`/dashboard/projects/${project.uid}?projectId=${project.uid}&userId=${userId}`}
+                      href={`/dashboard/projects/${project.uid}${project.approval === 'Draft' ? '/setup' : ''}?projectId=${project.uid}&userId=${userId}`}
                       className={`flex items-center gap-[14px] px-[28px] py-[16px] hover:bg-white/[0.03] ${i < projects.length - 1 ? 'border-b border-white/5' : ''}`}
                     >
                       <div className="w-[36px] h-[36px] rounded-[8px] BlackWithLightGradient ContentCardShadow flex items-center justify-center flex-shrink-0 overflow-hidden">

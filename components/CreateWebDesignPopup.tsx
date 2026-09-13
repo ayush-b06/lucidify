@@ -1,8 +1,10 @@
 "use client";
+import { useDialog } from '@/hooks/useDialog';
 
 import Image from 'next/image';
 import React, { useEffect, useState } from 'react';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, doc, writeBatch } from 'firebase/firestore';
+import { queueNotification } from '@/utils/notifications';
 import { db } from '../firebaseConfig'; // Adjust the path as needed
 import { useAuth } from '@/context/authContext'; // Import your AuthContext
 import { useRouter } from 'next/navigation';    // Import Next.js router
@@ -61,7 +63,10 @@ const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatP
     const designPages = ["Sections", "Full-Page"] as const; // 'as const' makes this a readonly tuple of literal types
 
 
-    const [isSubmitted, setIsSubmitted] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [error, setError] = useState('');
+    useEffect(() => { if (isVisible) { setError(''); setFormData({ designName: '', designDescription: '', designURL: '', designPage: '', designType: '', dateCreated: new Date().toISOString(), selectedDesign: false }); } }, [isVisible]);
 
     // Handle form input changes
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -92,40 +97,18 @@ const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatP
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!user) {
-            console.error('User is not logged in');
-            return;
-        }
-
-        if (!formData.designPage) {
-            console.error('Design page type is missing');
-            return;
-        }
-
+        if (!user || submitting || uploading) return;
+        if (!formData.designPage || !formData.designName.trim() || !formData.designURL) { setError('Add a design name, choose its page type, and upload an image first.'); return; }
+        setSubmitting(true); setError('');
         try {
-            console.log(formData.designPage);
-            // Determine the subcollection path based on designPage value
-            const subCollectionPath =
-                formData.designPage == 'Sections'
-                    ? `users/${userId}/projects/${projectId}/section web designs`
-                    : `users/${userId}/projects/${projectId}/full-page web designs`;
-
-            console.log(subCollectionPath);
-
-            // Reference to the appropriate subcollection
-            const designRef = collection(db, subCollectionPath);
-
-            console.log(designRef);
-            // Add the design data to the appropriate subcollection
-            await addDoc(designRef, formData);
-
-            console.log('Web design successfully created!');
-
-            onDesignAdded?.();
-            closeCreatProjectPopup();
-        } catch (error) {
-            console.error('Error adding document: ', error);
-        }
+            const subCollection = formData.designPage === 'Sections' ? 'section web designs' : 'full-page web designs';
+            const batch = writeBatch(db);
+            batch.set(doc(collection(db, 'users', userId, 'projects', projectId, subCollection)), { ...formData, designName: formData.designName.trim(), dateCreated: new Date().toISOString() });
+            queueNotification(batch, userId, 'New design uploaded', `${formData.designName.trim()} is ready to review.`, 'upload', projectId, `/dashboard/projects/${projectId}/uploads`);
+            await batch.commit();
+            onDesignAdded?.(); closeCreatProjectPopup();
+        } catch { setError('Could not save this design. Please try again.'); }
+        finally { setSubmitting(false); }
     };
 
     // Handle file upload for attachments
@@ -135,7 +118,9 @@ const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatP
     const handleDesignUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files ? e.target.files[0] : null;
 
-        if (file && user) { // Ensure user is available and file is selected
+        if (file && user && !uploading && !submitting) {
+            if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) { setError('Choose an image smaller than 10 MB.'); return; }
+            setUploading(true); setError('');
             try {
                 const formData = new FormData();
                 formData.append("file", file);
@@ -153,7 +138,8 @@ const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatP
 
                 if (response.ok) {
                     const data = await response.json();
-                    const downloadURL = data.secure_url; // Get the uploaded file's URL
+                    const downloadURL = data.secure_url;
+                    if (!downloadURL) throw new Error('Missing uploaded image'); // Get the uploaded file's URL
 
                     // Optionally, store the URL in your form data or handle accordingly
                     setFormData((prevState) => ({
@@ -163,10 +149,12 @@ const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatP
 
                     console.log("Logo uploaded successfully:", downloadURL); // Log URL for debugging
                 } else {
-                    console.error("Error uploading logo to Cloudinary:", await response.text());
+                    throw new Error('Upload failed');
                 }
             } catch (error) {
-                console.error("Error uploading logo:", error);
+                setError('Image upload failed. Please try again.');
+            } finally {
+                setUploading(false);
             }
         } else {
             console.error("No logo file selected or user is not logged in.");
@@ -174,33 +162,34 @@ const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatP
     };
 
 
+    const dialogRef = useDialog<HTMLFormElement>(isVisible, closeCreatProjectPopup, submitting || uploading);
+    if (!isVisible) return null;
     return (
         <div
             className={`h-screen bg-black bg-opacity-50 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 pointer-events-none translate-y-[50px]'} fixed inset-0 flex justify-center items-center z-[55]`}
         >
-            <form
-                className="relative flex max-h-[83vh] BlackScrollbar overflow-y-auto flex-col items-start px-[50px] py-5 BlackGradient ContentCardShadow rounded-[50px]"
+            <form ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Create a web design"
+                className="DashboardDialog relative flex w-[min(650px,94vw)] max-h-[90dvh] BlackScrollbar overflow-y-auto flex-col items-start px-[24px] sm:px-[50px] py-5 BlackGradient ContentCardShadow rounded-[50px]"
                 onSubmit={handleSubmit}
             >
+                {error && <p role="alert" className="DashboardNotice">{error}</p>}
+                {uploading && <p role="status">Uploading image…</p>}
+                {formData.designURL && <p role="status" className="text-sm mb-3">Image uploaded ✓</p>}
                 <div className="inline-flex items-center justify-center gap-5 ">
                     <div className="w-[50px]">
                         <Image
                             src="/Lucidify Umbrella.png"
                             alt="Lucidify Logo"
-                            layout="responsive"
-                            width={0}
-                            height={0}
+
+                            width={64}
+                            height={64}
                         />
                     </div>
-                    <div className=" font-semibold  text-[34px] leading-[normal]">
+                    <div className=" font-semibold  text-[24px] sm:text-[30px] leading-[normal]">
                         Create a Web Design.
                     </div>
                 </div>
-                <div className="flex flex-col w-[35px] h-[35px] items-center justify-center gap-2.5 p-1.5 absolute right-[50px] rounded-[100px] CloseCreateProjectPoppupGradient ContentCardShadow hover:cursor-pointer" onClick={closeCreatProjectPopup}>
-                    <div className=" w-[20px] rotate-45">
-                        <Image src="/Plus Icon.png" alt="Plus Icon" layout="responsive" width={0} height={0} />
-                    </div>
-                </div>
+                <button type="button" aria-label="Close design form" disabled={submitting || uploading} onClick={closeCreatProjectPopup} className="absolute top-4 right-5 w-9 h-9 rounded-full DashboardChoice">✕</button>
 
                 <div className="w-full my-[15px] opacity-25 border-[1.5px] border-[#808080] rounded-full" />
 
@@ -214,36 +203,36 @@ const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatP
                                 </div>
                                 <div className="w-0.5 bg-[#80808040] rounded-[100px]" />
                             </div>
-                            <div className="flex flex-wrap w-[1037px] items-center justify-between gap-[15px_15px]">
+                            <div className="flex flex-wrap w-full items-center justify-between gap-[15px_15px]">
                                 {/* Upload Logo */}
-                                <div className="flex flex-col w-[492px] items-start gap-[13px]">
+                                <div className="flex flex-col w-full items-start gap-[13px]">
                                     <div className="text-sm leading-[normal]">Upload Design<span className="text-[#998af8] text-[16px] font-bold">*</span></div>
                                     <div className="flex max-h-[38px] h-[38px] items-center gap-[19px] px-0 py-2.5 w-full rounded-[10px]">
                                         <div className="flex w-[38px] h-[38px] items-center justify-center gap-2.5 rounded-[100px] BlackWithLightGradient ContentCardShadow">
                                             <div className="w-[20px]">
-                                                <Image src="/Upload Icon.png" alt="Upload Icon" layout="responsive" width={0} height={0} />
+                                                <Image src="/Upload Icon.png" alt="Upload Icon" width={64} height={64} style={{ width: "100%", height: "auto" }} />
                                             </div>
                                         </div>
-                                        <label className="w-[246px] text-xs leading-[normal] cursor-pointer">
-                                            <span className="font-normal text-xs">Drag &amp; Drop your files here or </span>
+                                        <label className="flex-1 min-w-0 text-xs leading-[normal] cursor-pointer">
+                                            <span className="font-normal text-xs">Choose an image (up to 10 MB). </span>
                                             <span className="underline">Choose file</span>
                                             <input
                                                 type="file"
-                                                className="hidden"
+                                                className="hidden" aria-label="Design image"
                                                 onChange={handleDesignUpload}
-                                                accept=".png,.jpg,.jpeg,.pdf"
+                                                accept="image/*" disabled={uploading || submitting}
                                             />
                                         </label>
                                     </div>
                                 </div>
 
                                 {/* Project Name */}
-                                <div className="flex flex-col w-[492px] items-start gap-[13px]">
+                                <div className="flex flex-col w-full items-start gap-[13px]">
                                     <p className="text-sm">
                                         Design Name<span className="text-[#998af8] text-[16px] font-bold">*</span>
                                     </p>
                                     <input
-                                        id="designName"
+                                        id="designName" aria-label="Design name"
                                         type="text"
                                         value={formData.designName}
                                         onChange={handleInputChange}
@@ -256,12 +245,12 @@ const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatP
 
 
                                 {/* Project Description */}
-                                <div className="flex flex-col w-[492px] items-start gap-[13px]">
+                                <div className="flex flex-col w-full items-start gap-[13px]">
                                     <p className="text-sm">
                                         Design Description<span className="text-[#998af8] text-[16px] font-bold">*</span>
                                     </p>
                                     <input
-                                        id="designDescription"
+                                        id="designDescription" aria-label="Design description"
                                         value={formData.designDescription}
                                         onChange={handleInputChange}
                                         placeholder="Professional sleek design of a homepage, involving a homepage moving video and SSR."
@@ -270,7 +259,7 @@ const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatP
                                     />
                                 </div>
                                 {/* designTypes Section */}
-                                <div className="inline-flex flex-col w-[492px] items-start gap-2.5">
+                                <div className="inline-flex flex-col w-full items-start gap-2.5">
                                     <p className="text-sm">
                                         Design Page<span className="text-[#998af8] text-[16px] font-bold">*</span>
                                     </p>
@@ -278,9 +267,9 @@ const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatP
                                         {designPages.map((page) => (
                                             <button
                                                 key={page}
-                                                type="button"
+                                                type="button" aria-pressed={formData.designPage === page}
                                                 onClick={() => handleDesignPageToggle(page)}
-                                                className={`px-4 py-2 rounded-[10px] text-white text-[12px] ${formData.designPage === page
+                                                className={`DashboardChoice px-4 py-2 rounded-[10px] text-white text-[12px] ${formData.designPage === page
                                                     ? 'bg-[#725CF7] PopupAttentionShadow'
                                                     : 'bg-[#2A2A2D] ContentCardShadow'
                                                     }`}
@@ -299,9 +288,9 @@ const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatP
                                         {['Homepage', 'About', 'Services', 'Contact', 'Testimonials', 'FAQ', 'Pricing', 'Gallery', 'Events', 'Menu', 'Online Ordering', 'Reservations', 'Our Team', 'Blog', 'Portfolio', 'Support', 'Log in', 'Sign up', 'Social Media'].map((designType) => (
                                             <button
                                                 type="button"
-                                                key={designType}
+                                                key={designType} aria-pressed={formData.designType === designType}
                                                 onClick={() => handleDesignTypeToggle(designType)}
-                                                className={`px-4 py-2 rounded-[10px] text-white text-[12px] ${formData.designType.includes(designType)
+                                                className={`DashboardChoice px-4 py-2 rounded-[10px] text-white text-[12px] ${formData.designType === designType
                                                     ? 'bg-[#725CF7] PopupAttentionShadow'
                                                     : 'bg-[#2A2A2D] ContentCardShadow'
                                                     }`}
@@ -321,7 +310,7 @@ const CreateWebDesignPopup: React.FC<CreateWebDesignPopupProps> = ({ closeCreatP
                 <button
                     type="submit"
                     className={`py-[8px] w-full inline-flex items-center justify-center text-[16px] rounded-[10px] ${formData.designName && formData.designDescription && formData.designURL && formData.designPage && formData.designType ? "PopupAttentionGradient PopupAttentionShadow" : "PopupAttentionGradient ContentCardShadow opacity-50"}`}
-                    disabled={!formData.designName || !formData.designDescription || !formData.designURL || !formData.designType || !formData.designPage}
+                    disabled={submitting || uploading || !formData.designName || !formData.designDescription || !formData.designURL || !formData.designType || !formData.designPage}
                 >
                     Create Web Design
                 </button>

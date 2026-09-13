@@ -1,6 +1,7 @@
 // AdminDashboard.tsx
 "use client";
 import { useEffect, useState } from 'react';
+import { subscribeUserProjects, subscribeAllProjects } from '@/utils/projectSubscriptions';
 import { getAuth } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
@@ -9,7 +10,6 @@ import DashboardAdminSideNav from './DashboardAdminSideNav';
 import Image from 'next/image';
 import Link from 'next/link';
 import DashboardTopBar from './DashboardTopBar';
-import { useTheme } from '@/context/themeContext';
 
 interface Project {
   uid: string;
@@ -27,13 +27,12 @@ interface Project {
 
 const AdminDashboard = () => {
   const [allProjects, setAllProjects] = useState<Project[]>([]);
+  const [error, setError] = useState('');
+  const [attempt, setAttempt] = useState(0);
   const [dataLoading, setDataLoading] = useState(true);
   const [firstName, setFirstName] = useState<string | null>(null);
   const auth = getAuth();
   const router = useRouter();
-  const { setTheme } = useTheme();
-
-  useEffect(() => { setTheme('light'); }, []);
 
   const getFormattedDate = () => {
     const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -43,60 +42,22 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
-      const user = auth.currentUser;
-      if (!user) { router.push('/login'); return; }
-
-      try {
-        // Fetch admin name
-        const adminDoc = await getDoc(doc(db, "users", user.uid));
-        if (adminDoc.exists()) setFirstName(adminDoc.data().firstName || null);
-
-        // Fetch all users and their projects
-        const usersSnapshot = await getDocs(collection(db, 'users'));
-        const projects: Project[] = [];
-
-        for (const userDoc of usersSnapshot.docs) {
-          const userData = userDoc.data();
-          const userId = userDoc.id;
-          const clientName = userData.firstName
-            ? `${userData.firstName} ${userData.lastName || ''}`.trim()
-            : userData.displayName || 'Unknown';
-
-          const projectsSnap = await getDocs(collection(db, 'users', userId, 'projects'));
-          projectsSnap.forEach((pDoc) => {
-            const p = pDoc.data();
-            projects.push({
-              uid: pDoc.id,
-              userId,
-              clientName,
-              clientAvatar: userData.selectedAvatar,
-              projectName: p.projectName || 'Unnamed Project',
-              progress: p.progress || '0',
-              approval: p.approval || 'Pending',
-              dueDate: p.dueDate || null,
-              recentActivity: p.recentActivity || null,
-              dateCreated: p.dateCreated || null,
-              status: p.status || 1,
-            });
-          });
-        }
-
-        setAllProjects(projects);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setDataLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [auth, router]);
+    const user = auth.currentUser;
+    if (!user) { router.push('/login'); return; }
+    let active = true;
+    setError(''); setDataLoading(true);
+    getDoc(doc(db, 'users', user.uid)).then(snapshot => { if (active && snapshot.exists()) setFirstName(snapshot.data().firstName || null); }).catch(() => { if (active) setError('Could not load your profile. Please retry.'); });
+    const stop = subscribeAllProjects(items => {
+      setAllProjects(items.filter(p => p.approval !== 'Cancelled' && p.setupComplete !== false));
+      setDataLoading(false);
+    }, () => { setError('Could not load dashboard data. Please retry.'); setDataLoading(false); });
+    return () => { active = false; stop(); };
+  }, [auth, router, attempt]);
 
   const totalClients = Array.from(new Set(allProjects.map(p => p.userId))).length;
   const pendingProjects = allProjects.filter(p => p.approval === 'Pending').length;
   const activeProjects = allProjects.filter(p => p.approval === 'Approved').length;
-  const recentProjects = [...allProjects].reverse().slice(0, 6);
+  const recentProjects = [...allProjects].sort((a,b) => (new Date(b.dateCreated || '').getTime() || 0) - (new Date(a.dateCreated || '').getTime() || 0)).slice(0, 6);
 
   const getApprovalStyle = (approval?: string) => {
     if (approval === 'Approved') return 'text-green-400 bg-green-400/10 px-[10px] py-[3px] rounded-full text-[12px]';
@@ -110,6 +71,7 @@ const AdminDashboard = () => {
 
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-[60px] xl:pt-0">
         <DashboardTopBar title="Dashboard" />
+        {error && <div role="alert" className="DashboardNotice">{error} <button onClick={() => { setError(''); setAttempt(n => n + 1); }}>Retry</button></div>}
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-[30px] lg:px-[50px] py-[40px]">
@@ -166,7 +128,7 @@ const AdminDashboard = () => {
                 {recentProjects.map((project, i) => (
                   <Link
                     key={project.uid}
-                    href={`/dashboard/projects/${project.uid}?projectId=${project.uid}&userId=${project.userId}`}
+                    href={`/dashboard/projects/${project.uid}${project.approval === 'Draft' ? '/setup' : ''}?projectId=${project.uid}&userId=${project.userId}`}
                     className={`flex flex-col md:grid md:grid-cols-[1fr_1.5fr_120px_100px_80px] gap-[10px] md:gap-[15px] px-[30px] py-[18px] hover:bg-white/[0.03] ${i < recentProjects.length - 1 ? 'border-b border-white/5' : ''}`}
                   >
                     {/* Client */}

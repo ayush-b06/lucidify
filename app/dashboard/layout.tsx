@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { AuthProvider } from "@/context/authContext";
+import { NotificationProvider } from "@/context/notificationContext";
 import DashboardGuard from "@/components/DashboardGuard";
 
 export default function DashboardLayout({
@@ -9,7 +11,7 @@ export default function DashboardLayout({
   return (
     <AuthProvider>
       <DashboardGuard>
-        {children}
+        <Suspense fallback={<div role="status">Loading dashboard…</div>}><NotificationProvider>{children}</NotificationProvider></Suspense>
       </DashboardGuard>
     </AuthProvider>
   );

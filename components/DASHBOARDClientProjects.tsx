@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
+import { collection, updateDoc, doc, getDocs } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { db } from '../firebaseConfig';
 import { useAuth } from '@/context/authContext';
@@ -10,6 +10,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import CreateProjectPopup from './CreateProjectPopup';
 import DashboardTopBar from './DashboardTopBar';
+import { subscribeUserProjects } from '@/utils/projectSubscriptions';
 import { useTheme } from '@/context/themeContext';
 
 interface Project {
@@ -56,55 +57,33 @@ const DASHBOARDClientProjects = () => {
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
 
-    const fetchProjects = async () => {
-        if (!user) { router.push('/login'); return; }
-        try {
-            const snap = await getDocs(collection(db, 'users', user.uid, 'projects'));
-            const list: Project[] = [];
-            snap.forEach(d => {
-                const data = d.data() as Project;
-                list.push({
-                    uid: d.id,
-                    projectName: data.projectName || 'Unnamed Project',
-                    logoAttachment: data.logoAttachment || null,
-                    logoUrl: data.logoUrl || null,
-                    progress: data.progress || '0',
-                    recentActivity: data.recentActivity || null,
-                    dateCreated: data.dateCreated || null,
-                    approval: data.approval || 'pending',
-                    dueDate: data.dueDate || null,
-                    status: data.status || 1,
-                    setupComplete: data.setupComplete ?? false,
-                    projectDescription: data.projectDescription || '',
-                } as Project);
-            });
-            setProjects(list);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
-        }
-    };
-
+    const [error, setError] = useState('');
+    const [search, setSearch] = useState('');
+    const [attempt, setAttempt] = useState(0);
+    const fetchProjects = () => setAttempt(n => n + 1);
     useEffect(() => {
-        if (!authLoading) fetchProjects();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [authLoading]);
+        if (!user || authLoading) return;
+        setError(''); setLoading(true);
+        return subscribeUserProjects(user.uid, items => {
+            setProjects(items.filter(p => p.approval?.toLowerCase() !== 'cancelled'));
+            setLoading(false);
+        }, () => { setError('Could not load your projects. Please retry.'); setLoading(false); });
+    }, [user, authLoading, attempt]);
 
     const handleDeleteProject = async (uid: string) => {
         if (!user) return;
         if (!window.confirm('Are you sure you want to cancel this project?')) return;
         setDeletingId(uid);
         try {
-            await deleteDoc(doc(db, 'users', user.uid, 'projects', uid));
+            await updateDoc(doc(db, 'users', user.uid, 'projects', uid), { approval: 'Cancelled' });
             setProjects(prev => prev.filter(p => p.uid !== uid));
-        } catch { alert('Error cancelling project.'); }
+        } catch { setError('Could not cancel this project. Please retry.'); }
         finally { setDeletingId(null); }
     };
 
     // Theme tokens
     const textColor = isDark ? '#ffffff' : '#111111';
-    const mutedColor = isDark ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.40)';
+    const mutedColor = isDark ? 'rgba(255,255,255,0.68)' : 'rgba(0,0,0,0.65)';
     const cardBg = isDark ? 'linear-gradient(145deg, #141416 0%, #0f0f11 100%)' : 'rgba(255,255,255,0.88)';
     const cardBorder = isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(0,0,0,0.07)';
     const trackBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
@@ -121,6 +100,7 @@ const DASHBOARDClientProjects = () => {
 
             <div className="flex-1 flex flex-col pt-[60px] xl:pt-0 min-h-0 overflow-hidden">
                 <DashboardTopBar title="Projects" />
+                {error && <div role="alert" className="DashboardNotice">{error} <button onClick={fetchProjects}>Retry</button></div>}
 
                 <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">
 
@@ -139,6 +119,8 @@ const DASHBOARDClientProjects = () => {
                         </button>
                     </div>
 
+                    <input aria-label="Search projects" placeholder="Search projects…" value={search} onChange={e => setSearch(e.target.value)} className="DashboardSearch w-full mb-5 rounded-xl px-4 py-3" />
+                    {projects.length > 0 && !projects.some(p => p.projectName.toLowerCase().includes(search.toLowerCase())) && <p role="status" className="py-8">No projects match your search.</p>}
                     {/* States */}
                     {loading ? (
                         <div className="flex flex-col gap-[12px]">
@@ -163,17 +145,17 @@ const DASHBOARDClientProjects = () => {
                         </div>
                     ) : (
                         <div className="flex flex-col gap-[12px]">
-                            {projects.map((project) => {
-                                const statusCfg = STATUS_CONFIG[project.status ?? 1];
+                            {projects.filter(p => p.projectName.toLowerCase().includes(search.toLowerCase())).map((project) => {
+                                const statusCfg = STATUS_CONFIG[project.status ?? 1] || STATUS_CONFIG[1];
                                 const logoSrc = project.logoUrl || project.logoAttachment || '/Lucidify Umbrella.png';
-                                const progressNum = parseFloat(project.progress || '0');
+                                const progressNum = Math.min(100, Math.max(0, parseFloat(project.progress || '0') || 0));
                                 const isSetupIncomplete = !project.setupComplete;
                                 const isPending = project.setupComplete && project.approval?.toLowerCase() !== 'approved';
                                 const isApproved = project.setupComplete && project.approval?.toLowerCase() === 'approved';
 
                                 const cardHref = isSetupIncomplete && user
                                     ? `/dashboard/projects/${project.uid}/setup?userId=${user.uid}&projectId=${project.uid}`
-                                    : isApproved && user
+                                    : user
                                     ? `/dashboard/projects/${project.uid}?projectId=${project.uid}&userId=${user.uid}`
                                     : null;
 
@@ -181,7 +163,7 @@ const DASHBOARDClientProjects = () => {
                                     background: cardBg,
                                     border: cardBorder,
                                     boxShadow: isDark ? '0 2px 16px rgba(0,0,0,0.35)' : '0 2px 16px rgba(0,0,0,0.07)',
-                                    opacity: isPending ? 0.65 : 1,
+                                    opacity: 1,
                                 };
 
                                 const innerContent = (
@@ -210,14 +192,14 @@ const DASHBOARDClientProjects = () => {
                                                         {/* State chips */}
                                                         {isSetupIncomplete && (
                                                             <span className="flex items-center gap-[5px] px-[8px] py-[3px] rounded-[6px] text-[11px] font-medium flex-shrink-0"
-                                                                style={{ background: 'rgba(114,85,224,0.15)', color: '#a89cff', border: '1px solid rgba(114,85,224,0.25)' }}>
+                                                                style={{ background: 'rgba(114,85,224,0.15)', color: isDark ? '#bcb2ff' : '#5940b5', border: '1px solid rgba(114,85,224,0.25)' }}>
                                                                 Setup needed
                                                             </span>
                                                         )}
                                                         {isPending && (
                                                             <span className="flex items-center gap-[5px] px-[8px] py-[3px] rounded-[6px] text-[11px] font-medium flex-shrink-0"
-                                                                style={{ background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}>
-                                                                Pending approval
+                                                                style={{ background: 'rgba(251,191,36,0.12)', color: isDark ? '#fbbf24' : '#855800', border: '1px solid rgba(251,191,36,0.25)' }}>
+                                                                {project.approval?.toLowerCase() === 'declined' ? 'Declined' : 'Pending approval'}
                                                             </span>
                                                         )}
                                                         {isApproved && (
@@ -265,7 +247,7 @@ const DASHBOARDClientProjects = () => {
 
                                                     {isPending && (
                                                         <button
-                                                            onClick={() => handleDeleteProject(project.uid)}
+                                                            onClick={e => { e.preventDefault(); e.stopPropagation(); handleDeleteProject(project.uid); }}
                                                             disabled={deletingId === project.uid}
                                                             className="px-[14px] h-[34px] rounded-[10px] text-[12px] font-medium transition-all hover:opacity-80 disabled:opacity-40 flex-shrink-0"
                                                             style={{
@@ -294,7 +276,7 @@ const DASHBOARDClientProjects = () => {
                                             {isPending && (
                                                 <div className="sm:hidden mt-[12px]">
                                                     <button
-                                                        onClick={() => handleDeleteProject(project.uid)}
+                                                        onClick={e => { e.preventDefault(); e.stopPropagation(); handleDeleteProject(project.uid); }}
                                                         disabled={deletingId === project.uid}
                                                         className="px-[14px] h-[32px] rounded-[10px] text-[12px] font-medium"
                                                         style={{ background: 'rgba(241,63,94,0.10)', color: '#f87171', border: '1px solid rgba(241,63,94,0.25)' }}

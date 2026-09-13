@@ -1,10 +1,13 @@
 "use client";
 
+import { paymentCount, paymentAmount as safeAmount, paidCount, getPaid, getTotalCost, getRemaining } from '@/utils/billing';
 import { useEffect, useState } from 'react';
-import { collection, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { writeNotification } from '../utils/notifications';
+import { collection, getDocs, doc, getDoc, runTransaction, DocumentData } from 'firebase/firestore';
+import { queueNotification } from '../utils/notifications';
 import { db } from '../firebaseConfig';
+import { useLiveProject } from '@/hooks/useLiveProject';
 import Link from 'next/link';
+import ProjectBrief, { ProjectBriefData } from './ProjectBrief';
 import Image from 'next/image';
 import DashboardAdminSideNav from '@/components/DashboardAdminSideNav';
 import DashboardTopBar from './DashboardTopBar';
@@ -14,7 +17,7 @@ interface DASHBOARDAdminProjectDetailsProps {
     projectId: string;
 }
 
-interface ProjectDetails {
+interface ProjectDetails extends ProjectBriefData {
     projectName?: string;
     dueDate?: string;
     dateCreated?: string;
@@ -50,38 +53,18 @@ const planLabels: Record<number, string> = {
 const planButtonLabels = ['Upfront', '2-week', '3-week', '4-week', '5-week'];
 
 const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProjectDetailsProps) => {
-    const [projectDetails, setProjectDetails] = useState<ProjectDetails | null>(null);
-    const [loading, setLoading] = useState<boolean>(true);
-    const [error, setError] = useState<string | null>(null);
+    const { projectDetails, setProjectDetails, loading, error } = useLiveProject<ProjectDetails>(userId, projectId);
+    const [saveError, setSaveError] = useState('');
+    const [saving, setSaving] = useState(false);
     const [newPaymentAmount, setNewPaymentAmount] = useState<string | null>(null);
     const [designCount, setDesignCount] = useState(0);
 
     useEffect(() => {
-        const fetchProjectDetails = async () => {
-            if (!userId || !projectId) return;
-
-            try {
-                const projectDocRef = doc(db, 'users', userId, 'projects', projectId);
-                const projectDoc = await getDoc(projectDocRef);
-
-                if (projectDoc.exists()) {
-                    setProjectDetails(projectDoc.data() as ProjectDetails);
-                } else {
-                    setError('Project not found.');
-                }
-
-                const sectionSnap = await getDocs(collection(db, 'users', userId, 'projects', projectId, 'section web designs'));
-                const fullSnap = await getDocs(collection(db, 'users', userId, 'projects', projectId, 'full-page web designs'));
-                const totalDesigns = sectionSnap.size + fullSnap.size;
-                setDesignCount(totalDesigns);
-            } catch (err) {
-                setError('Failed to fetch project details.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchProjectDetails();
+        let active = true;
+        Promise.all(['section web designs', 'full-page web designs'].map(name => getDocs(collection(db, 'users', userId, 'projects', projectId, name))))
+            .then(results => { if (active) setDesignCount(results.reduce((total, snapshot) => total + snapshot.size, 0)); })
+            .catch(() => { if (active) setDesignCount(0); });
+        return () => { active = false; };
     }, [userId, projectId]);
 
     const {
@@ -103,67 +86,41 @@ const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProje
         setNewPaymentAmount(e.target.value);
     };
 
+    const saveBilling = async (updates: DocumentData, title: string, message: string) => {
+        if (saving) return false;
+        setSaving(true); setSaveError('');
+        try {
+            await runTransaction(db, async transaction => {
+                const ref = doc(db, 'users', userId, 'projects', projectId);
+                const snap = await transaction.get(ref);
+                if (!snap.exists()) throw new Error('Project no longer exists.');
+                const current = snap.data();
+                if (('paymentAmount' in updates || 'paymentPlan' in updates) && Number(current.weeksPaid) > 0) throw new Error('Payments have been recorded. Reload before changing the billing schedule.');
+                if ('paymentStartDate' in updates && current.paymentStatus && current.paymentStatus !== 'Not Started') throw new Error('The payment schedule has already started. Please reload.');
+                transaction.update(ref, updates);
+                queueNotification(transaction, userId, title, message, 'payment', projectId, `/dashboard/projects/${projectId}`);
+            });
+            setProjectDetails(prev => ({ ...prev, ...updates }));
+            return true;
+        } catch { setSaveError('Could not save billing changes. Please try again.'); return false; }
+        finally { setSaving(false); }
+    };
     const handlePaymentAmountSubmit = async (e: React.MouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
-        if (!userId || !projectId) return;
-
-        try {
-            const projectDocRef = doc(db, 'users', userId, 'projects', projectId);
-            const amount = parseFloat(newPaymentAmount || '0');
-            await updateDoc(projectDocRef, { paymentAmount: amount });
-            writeNotification(
-                userId,
-                'Payment amount updated',
-                `Your project payment has been set to $${amount.toFixed(2)}.`,
-                'payment',
-                projectId,
-                `/dashboard/projects/${projectId}?projectId=${projectId}&userId=${userId}`,
-            );
-            setNewPaymentAmount(null);
-            window.location.reload();
-        } catch (error) {
-            alert('Failed to update payment amount');
-        }
+        const amount = Number(newPaymentAmount);
+        if (!newPaymentAmount?.trim() || !Number.isFinite(amount) || amount < 0) { setSaveError('Enter a valid, non-negative payment amount.'); return; }
+        if ((weeksPaid || 0) > 0) { setSaveError('Payments have already been recorded. Resolve the existing billing schedule before changing its amount.'); return; }
+        const rounded = Math.round(amount * 100) / 100;
+        if (await saveBilling({ paymentAmount: rounded }, 'Payment amount updated', `Your project payment has been set to $${rounded.toFixed(2)}.`)) setNewPaymentAmount(null);
     };
-
     const handlePaymentPlanUpdate = async (newPaymentPlan: number) => {
-        if (!userId || !projectId) return;
-
-        try {
-            const projectDocRef = doc(db, 'users', userId, 'projects', projectId);
-            await updateDoc(projectDocRef, { paymentPlan: newPaymentPlan });
-            setProjectDetails((prev) => ({ ...prev, paymentPlan: newPaymentPlan }));
-            writeNotification(
-                userId,
-                'Payment plan updated',
-                `Your payment plan was changed to ${planLabels[newPaymentPlan] || 'a new plan'}.`,
-                'payment',
-                projectId,
-                `/dashboard/projects/${projectId}?projectId=${projectId}&userId=${userId}`,
-            );
-        } catch (err) {
-            // silently handle error
-        }
+        if ((weeksPaid || 0) > 0) { setSaveError('Payments have already been recorded. Resolve the existing billing schedule before changing its plan.'); return; }
+        await saveBilling({ paymentPlan: newPaymentPlan }, 'Payment plan updated', `Your payment plan was changed to ${planLabels[newPaymentPlan]}.`);
     };
-
     const handleStartPayment = async () => {
-        if (!userId || !projectId) return;
-
-        try {
-            const projectDocRef = doc(db, 'users', userId, 'projects', projectId);
-            await updateDoc(projectDocRef, { paymentStatus: 'On Time' });
-            setProjectDetails((prev) => ({ ...prev, paymentStatus: 'On Time' }));
-            writeNotification(
-                userId,
-                'Payment started',
-                'Your payment schedule has been activated. Your first payment is now due.',
-                'payment',
-                projectId,
-                `/dashboard/projects/${projectId}?projectId=${projectId}&userId=${userId}`,
-            );
-        } catch (err) {
-            // silently handle error
-        }
+        if (paymentStatus === 'Paid') { setSaveError('This project is already fully paid.'); return; }
+        if (!paymentCount(projectDetails || {}) || !safeAmount(projectDetails || {})) { setSaveError('Set a payment plan and a positive amount first.'); return; }
+        await saveBilling({ paymentStatus: 'On Time', paymentStartDate: new Date().toISOString() }, 'Payment schedule started', 'Your payment schedule has been activated. Contact Lucidify to arrange your first payment.');
     };
 
     if (loading) return (
@@ -185,12 +142,12 @@ const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProje
     );
 
     // Safe math
-    const safeWeeksPaid = weeksPaid || 0;
-    const safePaymentAmount = paymentAmount || 0;
-    const safePaymentPlan = paymentPlan || 1;
-    const amountPaid = safeWeeksPaid * safePaymentAmount;
-    const totalPayment = safePaymentPlan * safePaymentAmount;
-    const remainingPayment = totalPayment - amountPaid;
+    const safeWeeksPaid = paidCount(projectDetails || {});
+    const safePaymentAmount = safeAmount(projectDetails || {});
+    const safePaymentPlan = paymentCount(projectDetails || {});
+    const amountPaid = getPaid(projectDetails || {});
+    const totalPayment = getTotalCost(projectDetails || {});
+    const remainingPayment = getRemaining(projectDetails || {});
     const paymentProgress = totalPayment > 0 ? amountPaid / totalPayment : 0;
     const strokeDashOffset = 450 - paymentProgress * 450;
 
@@ -205,6 +162,7 @@ const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProje
             {/* Right Side */}
             <div className="flex-1 flex flex-col pt-[60px] xl:pt-0 min-h-0 overflow-hidden">
                 <DashboardTopBar title="Project Details" />
+                {saveError && <div role="alert" className="DashboardNotice">{saveError}</div>}
 
                 {/* Scrollable Area */}
                 <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">
@@ -229,11 +187,10 @@ const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProje
                         >
                             Uploads
                         </Link>
-                        <div className="opacity-40 cursor-not-allowed text-[#ffffff66] text-sm sm:text-base whitespace-nowrap">
-                            Analytics
-                        </div>
+
                     </div>
 
+                    {projectDetails && <ProjectBrief project={projectDetails} />}
                     {/* Main Grid */}
                     <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-[20px]">
 
@@ -459,7 +416,7 @@ const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProje
                                             <button
                                                 key={planNum}
                                                 type="button"
-                                                onClick={() => handlePaymentPlanUpdate(planNum)}
+                                                disabled={saving} onClick={() => handlePaymentPlanUpdate(planNum)}
                                                 className={`px-[14px] py-[8px] rounded-[10px] text-[13px] ${paymentPlan === planNum ? 'PopupAttentionGradient PopupAttentionShadow' : 'BlackWithLightGradient ContentCardShadow opacity-60 hover:opacity-90'}`}
                                             >
                                                 {label}
@@ -476,7 +433,7 @@ const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProje
                                     <div className="flex items-center bg-white/5 border border-white/10 rounded-[10px] px-[14px] py-[9px] flex-1 min-w-0">
                                         <span className={`text-[14px] ${!newPaymentAmount ? 'opacity-60' : ''}`}>$</span>
                                         <input
-                                            type="number"
+                                            type="number" aria-label="Payment amount" min="0" step="0.01"
                                             value={newPaymentAmount ?? ''}
                                             onChange={handlePaymentAmountChange}
                                             placeholder="750"
@@ -485,7 +442,7 @@ const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProje
                                     </div>
                                     <button
                                         onClick={handlePaymentAmountSubmit}
-                                        disabled={!newPaymentAmount}
+                                        disabled={saving || !newPaymentAmount}
                                         className={`PopupAttentionGradient PopupAttentionShadow px-[16px] py-[9px] rounded-[10px] text-[13px] flex-shrink-0 ${!newPaymentAmount ? 'opacity-70 cursor-not-allowed' : ''}`}
                                     >
                                         Set
@@ -497,9 +454,9 @@ const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProje
                             {/* CONTROL 3 — Payment Status */}
                             <div className="flex flex-col gap-[10px]">
                                 <p className="text-[12px] opacity-60">Payment Status</p>
-                                {paymentStatus !== 'On Time' ? (
+                                {!paymentStatus || paymentStatus === 'Not Started' ? (
                                     <button
-                                        onClick={handleStartPayment}
+                                        disabled={saving} onClick={handleStartPayment}
                                         className="PopupAttentionGradient PopupAttentionShadow w-full py-[10px] rounded-[10px] text-[13px] font-medium"
                                     >
                                         Start Payment
@@ -507,7 +464,7 @@ const DASHBOARDAdminProjectDetails = ({ userId, projectId }: DASHBOARDAdminProje
                                 ) : (
                                     <div className="inline-flex items-center">
                                         <div className="CorrectGradient inline-flex justify-center items-center rounded-full">
-                                            <span className="text-[12px] font-semibold px-[12px] py-[4px]">Payment active</span>
+                                            <span className="text-[12px] font-semibold px-[12px] py-[4px]">{paymentStatus === 'Paid' ? 'Fully paid' : 'Payment active'}</span>
                                         </div>
                                     </div>
                                 )}

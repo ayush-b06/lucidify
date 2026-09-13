@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { getAuth, signOut, sendPasswordResetEmail, deleteUser } from 'firebase/auth';
+import { getAuth, signOut, sendPasswordResetEmail } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
-import { doc, deleteDoc } from 'firebase/firestore';
+import { doc, writeBatch, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { queueAdminNotification } from '@/utils/notifications';
 import { db } from '../firebaseConfig';
 import DashboardClientSideNav from './DashboardClientSideNav';
 import DashboardTopBar from './DashboardTopBar';
@@ -13,17 +14,21 @@ const DASHBOARDClientSettings = () => {
     const [showDeletePopup, setShowDeletePopup] = useState(false);
     const [resetEmailSent, setResetEmailSent] = useState(false);
     const [resetLoading, setResetLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [deleting, setDeleting] = useState(false);
+    const [deletionRequested, setDeletionRequested] = useState(false);
     const auth = getAuth();
     const router = useRouter();
 
     useEffect(() => {
         const user = auth.currentUser;
-        if (!user) { router.push('/login'); }
+        if (!user) { router.push('/login'); return; }
+        return onSnapshot(doc(db, 'users', user.uid), snap => setDeletionRequested(!!snap.data()?.deletionRequestedAt), () => setError('Could not load account preferences. Please reload.'));
     }, [auth, router]);
 
     const handleLogOut = async () => {
-        await signOut(auth);
-        router.push('/login');
+        try { await signOut(auth); router.push('/login'); }
+        catch { setError('Could not sign out. Please try again.'); setShowLogoutPopup(false); }
     };
 
     const handlePasswordReset = async () => {
@@ -34,7 +39,7 @@ const DASHBOARDClientSettings = () => {
             await sendPasswordResetEmail(auth, user.email);
             setResetEmailSent(true);
         } catch (e) {
-            console.error(e);
+            setError('Could not send the reset email. Please try again.');
         } finally {
             setResetLoading(false);
         }
@@ -42,14 +47,16 @@ const DASHBOARDClientSettings = () => {
 
     const handleDeleteAccount = async () => {
         const user = auth.currentUser;
-        if (!user) return;
+        if (!user || deleting || deletionRequested) return;
+        setDeleting(true); setError('');
         try {
-            await deleteDoc(doc(db, 'users', user.uid));
-            await deleteUser(user);
-            router.push('/');
-        } catch (e) {
-            console.error(e);
-        }
+            const batch = writeBatch(db);
+            batch.update(doc(db, 'users', user.uid), { deletionRequestedAt: serverTimestamp() });
+            queueAdminNotification(batch, 'Account deletion requested', `${user.email || 'A client'} requested account and data deletion. Review their request and contact them to arrange completion.`, `/dashboard/messages?userId=${user.uid}&conversationId=lucidify`, 'account', 'account-deletion');
+            await batch.commit();
+            setDeletionRequested(true); setShowDeletePopup(false);
+        } catch { setError('Could not send your deletion request. Please try again.'); setShowDeletePopup(false); }
+        finally { setDeleting(false); }
     };
 
     return (
@@ -58,6 +65,7 @@ const DASHBOARDClientSettings = () => {
 
             <div className="flex-1 flex flex-col pt-[60px] xl:pt-0 min-h-0 overflow-hidden">
                 <DashboardTopBar title="Settings" />
+                {error && <div role="alert" className="DashboardNotice">{error}</div>}
 
                 {/* Scrollable Content */}
                 <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">
@@ -112,13 +120,13 @@ const DASHBOARDClientSettings = () => {
                             <div className="flex items-center justify-between gap-[20px]">
                                 <div>
                                     <div className="text-[14px] font-light">Delete Account</div>
-                                    <div className="text-[12px] opacity-35 font-light mt-[2px]">Permanently remove your account and all associated data.</div>
+                                    <div className="text-[12px] opacity-35 font-light mt-[2px]">Request account and data deletion from the Lucidify team.</div>
                                 </div>
                                 <button
-                                    onClick={() => setShowDeletePopup(true)}
+                                    disabled={deletionRequested} onClick={() => setShowDeletePopup(true)}
                                     className="flex-shrink-0 px-[16px] py-[8px] bg-red-500/15 border border-red-500/30 rounded-[10px] text-[13px] font-light text-red-400 active:scale-95 transition-transform whitespace-nowrap hover:bg-red-500/25"
                                 >
-                                    Delete Account
+                                    {deletionRequested ? 'Request sent' : 'Request deletion'}
                                 </button>
                             </div>
                         </div>
@@ -142,11 +150,11 @@ const DASHBOARDClientSettings = () => {
             <div className={`ease-in-out duration-300 fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center transition-opacity ${showDeletePopup ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}>
                 <div className={`ContentCardShadow BlackGradient rounded-[20px] p-[30px] w-[320px] flex flex-col items-center gap-[18px] transition-all duration-300 ${showDeletePopup ? 'translate-y-0 opacity-100' : '-translate-y-[30px] opacity-0'}`}>
                     <div className="text-[30px]">⚠️</div>
-                    <h2 className="text-[17px] font-semibold text-center">Delete your account?</h2>
-                    <p className="text-[12px] opacity-40 font-light text-center leading-relaxed">This will permanently delete your account and all your data. This cannot be undone.</p>
+                    <h2 className="text-[17px] font-semibold text-center">Request account deletion?</h2>
+                    <p className="text-[12px] opacity-40 font-light text-center leading-relaxed">Lucidify will review your request and contact you to complete deletion. Your account stays active until the request is completed.</p>
                     <div className="flex gap-[12px] w-full">
-                        <button onClick={handleDeleteAccount} className="flex-1 py-[10px] bg-red-500/20 border border-red-500/30 text-red-400 text-[13px] font-light rounded-[10px] active:scale-95">Delete</button>
-                        <button onClick={() => setShowDeletePopup(false)} className="flex-1 py-[10px] BlackWithLightGradient ContentCardShadow text-[13px] font-light rounded-[10px] active:scale-95">Cancel</button>
+                        <button disabled={deleting} onClick={handleDeleteAccount} className="flex-1 py-[10px] bg-red-500/20 border border-red-500/30 text-red-400 text-[13px] font-light rounded-[10px] active:scale-95">{deleting ? 'Sending…' : 'Send request'}</button>
+                        <button disabled={deleting} onClick={() => setShowDeletePopup(false)} className="flex-1 py-[10px] BlackWithLightGradient ContentCardShadow text-[13px] font-light rounded-[10px] active:scale-95">Cancel</button>
                     </div>
                 </div>
             </div>

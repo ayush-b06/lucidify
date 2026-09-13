@@ -1,52 +1,17 @@
-"use client"
-
-import DASHBOARDAdminProjectDetails from '@/components/DASHBOARDAdminProjectDetails';
-import DASHBOARDClientProjectDetails from '@/components/DASHBOARDClientProjectDetails';
+"use client";
+import Client from '@/components/DASHBOARDClientProjectDetails';
+import Admin from '@/components/DASHBOARDAdminProjectDetails';
 import { useAuth } from '@/context/authContext';
-import { useSearchParams } from 'next/navigation'; // Assuming you're still using `useSearchParams`
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-
-const ProjectPage = () => {
-  const router = useRouter();
-  const { user, loading } = useAuth();  // Use your auth hook
-  const searchParams = useSearchParams(); // Initialize useSearchParams
-  const userId = searchParams.get('userId'); // Get userId from query parameters
-  const projectId = searchParams.get('projectId'); // Get projectId from query parameters
-
-
-
-  useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        router.push('/login');  // Redirect to login if no user is logged in
-      } else {
-        // Check if the user is admin based on their email
-        if (user.email === 'ayush.bhujle@gmail.com') {
-          // Admin
-        } else {
-          // Client
-        }
-      }
-    }
-  }, [user, loading, router]);
-
-  if (loading || !user) {
-    return null;
-  }
-
-  // Ensure userId and projectId exist before rendering the component
-  if (!userId || !projectId) {
-    return null;
-  }
-
-  // Render correct dashboard
-  return user.email === 'ayush.bhujle@gmail.com' ? (
-    <DASHBOARDAdminProjectDetails userId={userId} projectId={projectId} />
-  ) : (
-    <DASHBOARDClientProjectDetails userId={userId} projectId={projectId} />
-  );
-
-};
-
-export default ProjectPage;
+import { useParams, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { ADMIN_EMAIL } from '@/utils/notifications';
+export default function ProjectPage() {
+    const { user } = useAuth();
+    const { projectId } = useParams<{ projectId: string }>();
+    const search = useSearchParams();
+    if (!user) return null;
+    const isAdmin = user.email === ADMIN_EMAIL;
+    const userId = isAdmin ? search.get('userId') : user.uid;
+    if (!userId) return <main className="DashboardBackgroundGradient p-8"><p>Select a client project to open its details.</p><Link href="/dashboard/projects" className="underline">Back to projects</Link></main>;
+    return isAdmin ? <Admin userId={userId} projectId={projectId} /> : <Client userId={userId} projectId={projectId} />;
+}

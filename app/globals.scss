@@ -793,7 +793,7 @@ body * {
       #101010 100%);
 }
 
-circle {
+.skill circle {
   fill: none;
   stroke: url(#GradientColor);
   stroke-width: 20px;
@@ -808,7 +808,7 @@ circle {
   }
 }
 
-svg {
+.skill > svg {
   position: absolute;
   top: 0;
   left: 0;
@@ -2036,7 +2036,7 @@ svg {
   color: white !important;
 
   * { color: white !important; }
-  .opacity-60 { opacity: 0.60 !important; }
+  .opacity-60 { opacity: 1 !important; }
 }
 
 /* Cards → light frosted glass */
@@ -2216,3 +2216,139 @@ svg {
     inset -2px -2px 10px rgba(98,101,240,0.10),
     0 4px 12px rgba(0,0,0,0.06) !important;
 }
+
+
+/* Dashboard controls must keep the foreground appropriate to their surface. */
+.DashboardMobileHeader { background: #101010; color: white; }
+[data-theme="light"] .DashboardMobileHeader { background: #f5f0ff; color: #171320; }
+
+[data-theme="light"] .DashboardBackgroundGradient {
+  .text-green-400, .text-green-500 { color: #166534 !important; }
+  .text-yellow-400, .text-yellow-500 { color: #854d0e !important; }
+  .text-red-400, .text-red-500 { color: #b91c1c !important; }
+  .text-blue-400 { color: #1d4ed8 !important; }
+  .text-purple-400 { color: #6b21a8 !important; }
+
+  .PopupAttentionGradient,
+  .bg-\[\#725CF7\],
+  .bg-\[\#5D3AEA\] {
+    color: white !important;
+    .text-white { color: white !important; }
+  }
+  .DashboardPurpleCard .text-white { color: white !important; }
+  .DashboardThemeToggle svg path[stroke="white"] { stroke: white !important; }
+
+  input::placeholder, textarea::placeholder,
+  .LeftGradientBorder input::placeholder,
+  .from-\[\#1A1A1A\] input::placeholder {
+    color: #625b70 !important;
+  }
+}
+
+/* Authentication errors sit on a dark purple surface in light mode. */
+[data-theme="light"] .FullPageBg .AuthError { color: #ffe0e0 !important; }
+[data-theme="dark"] .FullPageBg .AuthError { color: #991b1b !important; }
+
+.DashboardBackgroundGradient {
+  .text-\[\#ffffff66\], .text-white\/50 { color: #a8a5af; }
+}
+[data-theme="light"] .DashboardBackgroundGradient {
+  .text-\[\#ffffff66\], .text-white\/50 { color: #5c526b !important; }
+  .text-\[\#a89cff\], .text-\[\#c4baff\], .text-\[\#ADA0FF\] { color: #5940b5 !important; }
+  .text-\[\#FFD563\] { color: #854d0e !important; }
+  .text-\[\#62E98F\] { color: #166534 !important; }
+}
+
+/* Keep all setup steps reachable on phones and short screens. */
+.SignupSetup {
+  padding: 140px 16px 48px;
+  > nav { z-index: 30; }
+  > [id^="SignUpSection"]:not([id*="Pic"]) {
+    min-width: 0;
+    max-width: calc(100vw - 32px);
+  }
+}
+@media (max-width: 640px) {
+  .SignupSetup {
+    align-items: flex-start;
+    padding-top: 112px;
+    > nav {
+      top: 16px;
+      width: calc(100% - 32px);
+      padding: 8px;
+      > div { width: 100%; gap: 4px; }
+      button { flex: 1; width: auto; min-width: 0; }
+      .button__text { font-size: 12px; }
+    }
+    > [id*="Pic"] { display: none; }
+    > [id^="SignUpSection"]:not([id*="Pic"]) {
+      width: calc(100vw - 32px);
+      .px-8 { padding-left: 18px; padding-right: 18px; }
+      .flex.justify-between { flex-wrap: wrap; gap: 12px; }
+      .w-\[48\%\], .w-\[70\%\], .w-\[28\%\], .w-\[23\%\], .w-\[31\%\] { width: 100%; }
+      button.w-\[17\%\], button.w-\[21\%\], button.w-\[25\%\], button.w-\[30\%\], button.w-\[40\%\] { width: 100%; }
+      .w-\[95px\] { width: 64px; }
+    }
+  }
+}
+[data-theme="light"] .DashboardBackgroundGradient img.DashboardMonochromeIcon {
+  filter: invert(1) !important;
+}
+
+/* Shared dashboard surfaces and interaction states. */
+.DashboardBackgroundGradient {
+  --dashboard-surface: #17171c;
+  --dashboard-text: #f7f6fb;
+  --dashboard-muted: #b5b0c3;
+  --dashboard-line: #34313e;
+  --dashboard-hover: #25212f;
+  min-height: 100dvh;
+  height: 100dvh;
+  button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid #9884ff; outline-offset: 3px; }
+}
+[data-theme="light"] .DashboardBackgroundGradient {
+  --dashboard-surface: #fcfaff;
+  --dashboard-text: #211b30;
+  --dashboard-muted: #655c75;
+  --dashboard-line: #e1dbea;
+  --dashboard-hover: #f0eafb;
+}
+.DashboardIconButton { position: relative; display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--dashboard-line); border-radius: 14px; background: var(--dashboard-surface); color: var(--dashboard-text); }
+.NotificationRoot { position: relative; }
+.NotificationBadge { position: absolute; right: -5px; top: -5px; min-width: 19px; padding: 1px 5px; border-radius: 10px; background: #6043c9; color: #fff; font-size: 10px; font-weight: 600; }
+.NotificationPanel { position: fixed; top: 88px; right: 24px; width: min(390px, calc(100vw - 24px)); color: var(--dashboard-text); background: var(--dashboard-surface); border: 1px solid var(--dashboard-line); border-radius: 20px; box-shadow: 0 20px 65px #0004; overflow: hidden; z-index: 80; text-align: left; }
+.NotificationHeader { display: flex; align-items: center; justify-content: space-between; padding: 20px; h2 { font-size: 17px; font-weight: 600; } p { font-size: 12px; color: var(--dashboard-muted); margin-top: 3px; } > button { padding: 8px; } }
+.NotificationFilters { padding: 0 16px 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--dashboard-line); font-size: 11px; button { padding: 7px 9px; border-radius: 8px; } [aria-pressed="true"] { background: var(--dashboard-hover); font-weight: 600; } button:disabled { opacity: .5; } }
+.NotificationList { max-height: min(470px, calc(100dvh - 250px)); overflow-y: auto; overscroll-behavior: contain; }
+.NotificationItem { display: flex; width: 100%; gap: 12px; text-align: left; padding: 16px 20px; border-bottom: 1px solid var(--dashboard-line); font-size: 12px; strong { display: block; font-size: 13px; font-weight: 500; } small { display: block; margin-top: 7px; font-size: 10px; color: var(--dashboard-muted); } &:hover { background: var(--dashboard-hover); } &.isUnread { border-left: 3px solid #8065e2; padding-left: 17px; strong { font-weight: 600; } } }
+.NotificationMessage { display: block; margin-top: 4px; color: var(--dashboard-muted); overflow-wrap: anywhere; line-height: 1.6; }
+.NotificationType { flex-shrink: 0; font-size: 18px; }
+.NotificationEmpty { text-align: center; padding: 36px 22px; color: var(--dashboard-muted); > span { font-size: 26px; } p { margin: 10px 0 5px; font-size: 13px; } small { font-size: 11px; } }
+.DashboardNotice { margin: 12px 20px; padding: 12px 16px; border: 1px solid #c9808070; border-radius: 12px; background: #c9404010; color: var(--dashboard-text); font-size: 13px; button { text-decoration: underline; font-weight: 600; margin-left: 8px; } }
+.DashboardTopBar { position: relative; z-index: 45; }
+@media (max-width: 1299px) { .NotificationPanel { top: 68px; right: 12px; } .DashboardTopBar { z-index: 30; } }
+
+/* Readable secondary content and inputs in both themes. */
+.DashboardBackgroundGradient :is(p, h3, label, span)[class*="opacity-"]:not([class*="disabled:"]):not([aria-hidden="true"]) {
+  &[class*="opacity-25"], &[class*="opacity-30"], &[class*="opacity-35"], &[class*="opacity-40"], &[class*="opacity-50"] { opacity: .72; }
+}
+.DashboardSearch { background: var(--dashboard-surface); color: var(--dashboard-text); border: 1px solid var(--dashboard-line); }
+.DashboardBackgroundGradient input::placeholder, .DashboardBackgroundGradient textarea::placeholder { color: var(--dashboard-muted); opacity: 1; }
+html[data-theme="light"] .DashboardBackgroundGradient {
+  .text-green-400 { color: #15703f; }
+  .text-red-400 { color: #b32d3a; }
+  .text-yellow-400 { color: #805900; }
+  .text-\[\#a89cff\] { color: #5940b5; }
+}
+@media (max-width: 639px) {
+  .DashboardBackgroundGradient .gap-\[20px\]:has(> button) { flex-wrap: wrap; }
+}
+
+.DashboardDialog {
+  --dashboard-surface: #24212d; --dashboard-text: #f7f6fb; --dashboard-muted: #b5b0c3; --dashboard-line: #4d465e;
+  color: var(--dashboard-text);
+  button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid #9884ff; outline-offset: 3px; }
+}
+[data-theme="light"] .DashboardDialog { --dashboard-surface: #f2eef9; --dashboard-text: #211b30; --dashboard-muted: #655c75; --dashboard-line: #d6cce4; }
+.DashboardDialog .DashboardChoice { color: var(--dashboard-text) !important; background: var(--dashboard-surface); border: 1px solid var(--dashboard-line); box-shadow: none; }
+.DashboardDialog .DashboardChoice[aria-pressed="true"] { color: #fff !important; background: #6745d6; border-color: #6745d6; }
