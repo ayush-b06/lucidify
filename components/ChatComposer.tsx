@@ -118,7 +118,6 @@ export default function ChatComposer({ target, dropTarget, placeholder = 'Write 
             <textarea aria-label="Message" rows={1} maxLength={10000} placeholder={target ? placeholder : 'Select a chat to send a message'} value={draft.text} disabled={!target || busy} onChange={event => change(key, current => ({ ...current, text: event.target.value }))} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
             <button className={`${styles.icon} ${styles.send}`} aria-label="Send message" disabled={!target || !!sendingKey || (!draft.text.trim() && !draft.files.length)} onClick={send}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="m3 3 19 9-19 9 4-9-4-9ZM7 12h15" /></svg></button>
         </div>
-        <p className={styles.hint}>Up to 5 files · 10 MB each · Shift + Enter for a new line</p>
         {!!draft.files.length && <p className={styles.hint}>Anyone with a file’s link can open it.</p>}
     </div>;
 }

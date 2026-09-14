@@ -129,9 +129,8 @@ const DASHBOARDAdminProjects = () => {
                         <div className="flex flex-col gap-[36px]">
                             {userProjects.map((user) => {
                                 const profile = userProfiles[user.userId];
-                                const displayName = profile?.firstName && profile?.lastName
-                                    ? `${profile.firstName} ${profile.lastName}`
-                                    : profile?.displayName || 'Unknown Client';
+                                const displayName = [profile?.firstName, profile?.lastName].filter(part => part?.trim()).join(' ').trim()
+                                    || profile?.displayName?.trim() || 'Unnamed client';
                                 const avatarSrc = profile?.selectedAvatar
                                     ? `/${profile.selectedAvatar}`
                                     : profile?.photoURL || '/Lucidify Umbrella.png';

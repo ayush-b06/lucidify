@@ -214,3 +214,31 @@ test('blocked PDF downloads explain how to recover and retry after delivery is e
  await page.unroute(url,denied);const downloaded=page.waitForEvent('download');await download.click();expect((await downloaded).suggestedFilename()).toBe('blocked.pdf');
  await expect(page.getByRole('alert').filter({hasText:'PDF and ZIP downloads are currently blocked'})).toHaveCount(0);
 });
+
+test('migrated single-name members are searchable before signing in and named correctly for admins', async ({page,browser}) => {
+ const {loadDirectoryProfile}=require('../scripts/sync-member-directory.cjs');
+ const migrate=loadDirectoryProfile();
+ const singleName=`Casey${Date.now()}`;
+ const member=await user(undefined,singleName),searcher=await user();await user(adminEmail,'Ayush');
+ await put(`users/${member.uid}`,{lastName:''});
+ const projection=migrate({firstName:singleName,lastName:'',selectedAvatar:'Avatar 4.png'});
+ expect(projection.searchPrefixes).toContain(singleName.toLowerCase());
+ expect(migrate({firstName:'Élodie',lastName:'Rivera'}).searchPrefixes).toEqual(directoryProfile({firstName:'Élodie',lastName:'Rivera'}).searchPrefixes);
+ await put(`userDirectory/${member.uid}`,projection);
+ await put(`users/${member.uid}/projects/name-check`,{projectName:'Single name portfolio',setupComplete:true,approval:'Pending'});
+ await login(page,searcher.email);await page.goto('/dashboard/messages');
+ await expect(page.getByText('Up to 5 files · 10 MB each · Shift + Enter for a new line',{exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:/New/}).click();const modal=page.getByRole('dialog',{name:'New message'});
+ await modal.getByLabel('Name',{exact:true}).fill(singleName.slice(0,-1));
+ await expect(modal.getByRole('button',{name:`Message ${singleName}`,exact:true})).toBeVisible();
+ await modal.getByRole('button',{name:`Message ${singleName}`,exact:true}).click();
+ await expect(modal).toHaveCount(0);
+ const context=await browser.newContext();const admin=await context.newPage();
+ try {
+  await login(admin,adminEmail);await admin.goto('/dashboard/projects');
+  await expect(admin.getByText(singleName,{exact:true})).toBeVisible();
+  await admin.goto(`/dashboard/messages?userId=${member.uid}&conversationId=lucidify`);
+  await expect(admin.getByLabel('Message',{exact:true})).toBeEnabled();
+  await expect(admin.getByText('Up to 5 files · 10 MB each · Shift + Enter for a new line',{exact:true})).toHaveCount(0);
+ } finally {await context.close();}
+});
