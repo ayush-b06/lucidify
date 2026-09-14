@@ -23,7 +23,7 @@ interface UserProfile {
     bio: string;
 }
 
-const DEFAULT_BIO = "Hey! I'm a Lucidify Member 👋";
+const DEFAULT_BIO = "Lucidify member";
 
 // ── Defined outside component so React doesn't remount inputs on each render ──
 const Field = ({
@@ -257,7 +257,7 @@ const DASHBOARDClientProfile = () => {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex flex-wrap items-center gap-[10px] mb-[6px]">
                                         <h1 className="text-[22px] sm:text-[26px] font-semibold leading-tight">
-                                            {current.firstName || 'Your'} {current.lastName || 'Name'}
+                                            {[current.firstName, current.lastName].filter(Boolean).join(' ') || 'Your name'}
                                         </h1>
                                         <span className="flex items-center gap-[5px] bg-[#725CF7]/20 border border-[#725CF7]/30 px-[10px] py-[3px] rounded-full text-[10px] text-[#a89cff] font-medium whitespace-nowrap">
                                             ✦ Lucidify Member

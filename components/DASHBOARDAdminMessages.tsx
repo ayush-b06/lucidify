@@ -304,7 +304,7 @@ const DASHBOARDAdminMessages: React.FC = () => {
                                                     <div className="flex flex-col gap-[10px]">
                                                         <div className="flex items-center gap-[10px]">
                                                             <h3 className="font-semibold text-[16px]">{selectedChat ? selectedChat.firstName || 'Untitled Chat' : 'Loading...'}</h3>
-                                                            <h3 className="opacity-80 font-light text-[14px]">{selectedChat ? selectedChat.companyName || 'Untitled Chat' : 'Loading...'}</h3>
+                                                            <h3 className="opacity-80 font-light text-[14px]">{selectedChat ? selectedChat.companyName || 'Lucidify member' : 'Loading...'}</h3>
                                                         </div>
                                                         <div className="flex flex-col gap-[10px]">
                                                             {group.map((message) => (

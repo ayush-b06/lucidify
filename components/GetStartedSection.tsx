@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import React, { useState, useEffect, useRef } from 'react';
-import StartAProjectButton from './StartAProjectButton'
+import NavStartAProjectButton from './NavStartAProjectButton'
 import LogInButton from './LogInButton'
 import Popup from './Popup';
 
@@ -140,10 +140,10 @@ const GetStartedSection = () => {
                             className="mr-[32px]"
                             style={{ transition: 'transform 0.25s ease' }}
                         >
-                            <StartAProjectButton onClick={togglePopup} />
+                            <NavStartAProjectButton onClick={togglePopup} />
                         </div>
 
-                        <LogInButton />
+                        <LogInButton href="/signup" label="Sign Up" />
                     </div>
                 </div>
             </div>

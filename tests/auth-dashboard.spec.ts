@@ -42,7 +42,7 @@ test('signed-out dashboard redirects to login', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Welcome Back!' })).toBeVisible();
 });
 
-test('signup, new-tab recovery, skipped optional steps, atomic setup, and theme navigation', async ({ page, context }) => {
+test('signup, new-tab recovery, minimal name and avatar setup, atomic setup, and theme navigation', async ({ page, context }) => {
   await page.goto('/signup');
   await page.getByPlaceholder('Email address').fill(uniqueEmail());
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
@@ -51,17 +51,19 @@ test('signup, new-tab recovery, skipped optional steps, atomic setup, and theme 
   await passwords.nth(1).fill(password);
   await page.getByRole('button', { name: 'Complete Sign Up' }).click();
   await expect(page).toHaveURL(/\/signup\/get-started$/);
-  await expect(page.getByPlaceholder('John')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'What should we call you?' })).toBeVisible();
   // A new tab has no sessionStorage signupEmail/signupUid.
   const recovered = await context.newPage();
   await recovered.goto('/dashboard');
   await expect(recovered).toHaveURL(/\/signup\/get-started$/);
-  await recovered.getByPlaceholder('John').fill('Taylor');
-  await recovered.locator('#SignUpSection1').getByRole('button', { name: 'Continue', exact: true }).click();
-  await recovered.locator('#SignUpSection2').getByRole('button', { name: 'Skip for now' }).click();
-  await recovered.locator('#SignUpSection3').getByRole('button', { name: 'Skip for now' }).click();
+  await recovered.getByRole('textbox', { name: 'What should we call you?' }).fill('Taylor');
+  await expect(recovered.getByRole('radio')).toHaveCount(24);
+  await expect(recovered.getByRole('textbox')).toHaveCount(1);
+  await expect(recovered.locator('input[type=file]')).toHaveCount(0);
   await recovered.getByRole('img', { name: 'Avatar 1', exact: true }).click();
-  await recovered.getByRole('button', { name: 'Finish Setup' }).click();
+  await expect(recovered.getByRole('radio', { name: 'Avatar 1', exact: true })).toBeChecked();
+  await recovered.screenshot({ path: 'artifacts/account-setup-desktop.png', animations: 'disabled' });
+  await recovered.getByRole('button', { name: 'Finish setup' }).click();
   await expect(recovered).toHaveURL(/\/dashboard$/);
   await expect(recovered.getByRole('heading', { name: 'Welcome back, Taylor!' })).toBeVisible();
   await recovered.locator('img').evaluateAll(images => Promise.all(images.filter(img => img.getBoundingClientRect().width > 0 && img.getBoundingClientRect().height > 0 && img.getBoundingClientRect().x >= 0).map(img => (img as HTMLImageElement).decode().catch(() => {}))));
@@ -93,9 +95,9 @@ test('incomplete existing profile resumes setup after email login', async ({ pag
   await seedUser(email, { firstName: 'Incomplete', setUp: false });
   await login(page, email);
   await expect(page).toHaveURL(/\/signup\/get-started$/);
-  await expect(page.getByPlaceholder('John')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'What should we call you?' })).toBeVisible();
   await page.reload();
-  await expect(page.getByPlaceholder('John')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'What should we call you?' })).toBeVisible();
 });
 
 test('completed account goes directly to dashboard', async ({ page }) => {
@@ -137,28 +139,30 @@ async function patchProfile(uid: string, fields: Record<string, unknown>) {
 test('failed setup is atomic, keeps answers, and retries once without duplicate messages on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const email = uniqueEmail();
-  const uid = await seedUser(email, { denyWrites: true, setUp: false });
+  const uid = await seedUser(email, { denyWrites: true, setUp: false, firstName: 'Existing', companyName: 'Saved studio', bio: 'My existing bio', lastName: 'Lee' });
   await login(page, email);
   await expect(page).toHaveURL(/\/signup\/get-started$/);
-  await page.getByPlaceholder('John').fill('Mobile');
-  await page.locator('#SignUpSection1').getByRole('button', { name: 'Continue', exact: true }).click();
-  await page.locator('#SignUpSection2').getByRole('button', { name: 'Skip for now' }).click();
-  await page.locator('#SignUpSection3').getByRole('button', { name: 'Skip for now' }).click();
+  await expect(page.getByRole('textbox', { name: 'What should we call you?' })).toHaveValue('Existing');
+  await page.getByRole('textbox', { name: 'What should we call you?' }).fill('Mobile');
   await page.getByRole('img', { name: 'Avatar 2', exact: true }).click();
-  await page.getByRole('button', { name: 'Finish Setup' }).click();
+  await page.getByRole('button', { name: 'Finish setup' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'couldn’t save your setup' })).toBeVisible();
   const profile = await (await fetch(`${firestore}/users/${uid}`, { headers: { Authorization: 'Bearer owner' } })).json();
   expect(profile.fields.setUp.booleanValue).toBe(false);
   const messages = await fetch(`${firestore}/users/${uid}/conversations/lucidify/messages/welcome`, { headers: { Authorization: 'Bearer owner' } });
   expect(messages.status).toBe(404);
   await page.screenshot({ path: 'artifacts/setup-mobile-retry.png', animations: 'disabled' });
-  const finishBox = await page.getByRole('button', { name: 'Finish Setup' }).boundingBox();
+  const finishBox = await page.getByRole('button', { name: 'Finish setup' }).boundingBox();
   expect(finishBox!.x).toBeGreaterThanOrEqual(0);
   expect(finishBox!.x + finishBox!.width).toBeLessThanOrEqual(390);
-  await patchProfile(uid, { denyWrites: { booleanValue: false }, setUp: { booleanValue: false } });
-  await page.getByRole('button', { name: 'Finish Setup' }).dblclick();
+  await patchProfile(uid, { ...profile.fields, denyWrites: { booleanValue: false }, setUp: { booleanValue: false } });
+  await page.getByRole('button', { name: 'Finish setup' }).dblclick();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole('heading', { name: 'Welcome back, Mobile!' })).toBeVisible();
+  const preserved = await (await fetch(`${firestore}/users/${uid}`, { headers: { Authorization: 'Bearer owner' } })).json();
+  expect(preserved.fields.companyName.stringValue).toBe('Saved studio');
+  expect(preserved.fields.bio.stringValue).toBe('My existing bio');
+  expect(preserved.fields.lastName.stringValue).toBe('Lee');
   const conversations = await (await fetch(`${firestore}/users/${uid}/conversations`, { headers: { Authorization: 'Bearer owner' } })).json();
   expect(conversations.documents).toHaveLength(1);
   const welcomeMessages = await (await fetch(`${firestore}/users/${uid}/conversations/lucidify/messages`, { headers: { Authorization: 'Bearer owner' } })).json();
@@ -186,7 +190,7 @@ test('new Google login reaches setup', async ({ page }) => {
   await popup.locator('#display-name-input').fill('Google Test');
   await popup.getByRole('button', { name: 'Sign in with Google.com' }).click();
   await expect(page).toHaveURL(/\/signup\/get-started$/);
-  await expect(page.getByPlaceholder('John')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'What should we call you?' })).toBeVisible();
 });
 
 test('cancelled Google signup is visible on the first signup step', async ({ page }) => {

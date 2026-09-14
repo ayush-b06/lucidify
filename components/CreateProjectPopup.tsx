@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from 'next/navigation';
 import { useDialog } from '@/hooks/useDialog';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -15,6 +16,8 @@ interface CreateProjectPopupProps {
 
 const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProjectPopup, isVisible, onCreated }) => {
     const { user } = useAuth();
+    const router = useRouter();
+    const creating = useRef(false);
     const { theme } = useTheme();
     const isDark = theme === 'dark';
 
@@ -43,15 +46,16 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || loading) return;
+        if (!user || creating.current) return;
         if (!projectName.trim()) {
             setError('Give your project a name first.');
             return;
         }
+        creating.current = true;
         setLoading(true);
         setError('');
         try {
-            await addDoc(collection(db, 'users', user.uid, 'projects'), {
+            const project = await addDoc(collection(db, 'users', user.uid, 'projects'), {
                 projectName: projectName.trim(),
                 projectDescription: projectDescription.trim(),
                 dateCreated: new Date().toISOString(),
@@ -62,10 +66,12 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
             });
             closeCreatProjectPopup();
             onCreated?.();
+            router.push(`/dashboard/projects/${project.id}/setup`);
         } catch (err) {
             console.error(err);
             setError('Something went wrong. Please try again.');
         } finally {
+            creating.current = false;
             setLoading(false);
         }
     };
@@ -74,8 +80,8 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
     if (!isVisible) return null;
 
     const textColor = isDark ? '#ffffff' : '#111111';
-    const mutedColor = isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.42)';
-    const subtleColor = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.22)';
+    const mutedColor = isDark ? '#b8b4c6' : '#656170';
+    const subtleColor = isDark ? '#a9a4b8' : '#6e6979';
 
     const inputBase: React.CSSProperties = {
         background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
@@ -153,14 +159,14 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
                             border: '1px solid rgba(114,85,224,0.22)',
                         }}
                     >
-                        🚀
+                        <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: isDark ? '#b49cff' : '#6546c6' }}><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M3 9h18M8 4v5M9 14h6m-3-3v6" /></svg>
                     </div>
 
                     <h2 className="text-[20px] font-bold mb-[6px]" style={{ color: textColor }}>
                         What are we building?
                     </h2>
                     <p className="text-[13px] leading-[1.6]" style={{ color: mutedColor }}>
-                        Give your project a name. You&apos;ll fill in the details next.
+                        Start with a name — even a working title. We’ll help you shape the idea next.
                     </p>
                 </div>
 
@@ -248,7 +254,7 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
                             className="flex items-center gap-[8px] px-[14px] py-[10px] rounded-[11px] text-[13px]"
                             style={{ background: 'rgba(248,113,113,0.10)', border: '1px solid rgba(248,113,113,0.25)', color: '#f87171' }}
                         >
-                            <span>⚠</span> {error}
+                            {error}
                         </div>
                     )}
 

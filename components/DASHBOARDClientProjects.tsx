@@ -9,6 +9,7 @@ import DashboardClientSideNav from './DashboardClientSideNav';
 import Image from 'next/image';
 import Link from 'next/link';
 import CreateProjectPopup from './CreateProjectPopup';
+import DashboardIcon from './DashboardIcon';
 import DashboardTopBar from './DashboardTopBar';
 import { subscribeUserProjects } from '@/utils/projectSubscriptions';
 import { useTheme } from '@/context/themeContext';
@@ -132,9 +133,9 @@ const DASHBOARDClientProjects = () => {
                     ) : projects.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-[70px] gap-[14px] rounded-[20px]"
                             style={{ background: cardBg, border: cardBorder }}>
-                            <div className="text-[44px] opacity-20">📂</div>
-                            <p className="text-[15px] font-medium opacity-40">No projects yet</p>
-                            <p className="text-[13px] opacity-30 mb-[4px]">Click &quot;New project&quot; above to get started.</p>
+                            <DashboardIcon size={36} />
+                            <p className="text-[15px] font-medium">What would you like to make?</p>
+                            <p className="text-[13px] opacity-80 mb-[4px] text-center px-5">Start with a rough idea. We’ll help you figure out the rest.</p>
                             <button
                                 onClick={toggleCreateProjectPopup}
                                 className="mt-[4px] px-[20px] h-[40px] rounded-[12px] text-[13px] font-medium text-white transition-opacity hover:opacity-85"

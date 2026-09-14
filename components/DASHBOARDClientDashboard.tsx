@@ -1,14 +1,17 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { subscribeUserProjects, subscribeAllProjects } from '@/utils/projectSubscriptions';
+import { subscribeUserProjects } from '@/utils/projectSubscriptions';
 import { getAuth } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { db } from '../firebaseConfig';
 import DashboardClientSideNav from './DashboardClientSideNav';
 import Image from 'next/image';
 import Link from 'next/link';
 import DashboardTopBar from './DashboardTopBar';
+import CreateProjectPopup from './CreateProjectPopup';
+import DashboardIcon from './DashboardIcon';
+import { paymentCount, paidCount } from '@/utils/billing';
 
 interface Project {
   uid: string;
@@ -25,6 +28,7 @@ interface Project {
 }
 
 const DASHBOARDClientDashboard = () => {
+  const [creatingProject, setCreatingProject] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -55,7 +59,9 @@ const DASHBOARDClientDashboard = () => {
     return () => { active = false; stop(); };
   }, [auth, router, attempt]);
 
-  const activeProject = projects.find(p => p.approval === 'Approved') || projects[0] || null;
+  const activeProject = projects.find(p => p.approval === 'Approved') || projects.find(p => p.approval === 'Draft') || projects.find(p => p.approval === 'Pending') || projects[0] || null;
+  const isBuilding = activeProject?.approval === 'Approved';
+  const projectHeading = !activeProject ? 'Your first website starts here' : isBuilding ? 'Active Project' : activeProject.approval === 'Draft' ? 'Continue your project brief' : activeProject.approval === 'Declined' ? 'Let’s talk about your project' : 'Your brief is with us';
   const activeCount = projects.filter(p => p.approval === 'Approved').length;
   const pendingCount = projects.filter(p => p.approval === 'Pending').length;
 
@@ -67,6 +73,7 @@ const DASHBOARDClientDashboard = () => {
 
   return (
     <div className="flex flex-col xl:flex-row h-screen DashboardBackgroundGradient overflow-hidden">
+      <CreateProjectPopup isVisible={creatingProject} closeCreatProjectPopup={() => setCreatingProject(false)} />
       <DashboardClientSideNav highlight="dashboard" />
 
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-[60px] xl:pt-0">
@@ -82,32 +89,15 @@ const DASHBOARDClientDashboard = () => {
             <p className="text-[14px] font-light opacity-60">Today is {getFormattedDate()}</p>
           </div>
 
-          {/* Stat Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-[15px] mb-[30px]">
-            {[
-              { label: 'Total Projects', value: dataLoading ? '—' : projects.length, icon: '📁', color: '#725CF7' },
-              { label: 'Active', value: dataLoading ? '—' : activeCount, icon: '✅', color: '#22c55e' },
-              { label: 'Pending Review', value: dataLoading ? '—' : pendingCount, icon: '⏳', color: '#f59e0b' },
-            ].map((stat) => (
-              <div key={stat.label} className="DashboardPurpleCard ContentCardShadow rounded-[20px] px-[25px] py-[22px] flex flex-col gap-[10px]">
-                <div className="flex items-center justify-between">
-                  <p className="text-[13px] font-light opacity-60">{stat.label}</p>
-                  <span className="text-[18px]">{stat.icon}</span>
-                </div>
-                <p className="text-[32px] font-semibold" style={{ color: stat.color }}>{stat.value}</p>
-              </div>
-            ))}
-          </div>
-
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-[20px] mb-[20px]">
             {/* Active Project Spotlight */}
             <div className="BlackGradient ContentCardShadow rounded-[24px] overflow-hidden flex flex-col">
               <div className="flex items-center justify-between px-[28px] py-[20px] border-b border-white/10">
-                <h2 className="text-[17px] font-semibold">Active Project</h2>
+                <h2 className="text-[17px] font-semibold">{projectHeading}</h2>
                 {projects.length > 0 && (
                   <Link href="/dashboard/projects" className="text-[12px] opacity-50 hover:opacity-100 flex items-center gap-[4px]">
                     All projects
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </Link>
                 )}
               </div>
@@ -116,10 +106,10 @@ const DASHBOARDClientDashboard = () => {
                   <p className="opacity-40 font-light text-[14px]">Loading...</p>
                 ) : !activeProject ? (
                   <div className="flex flex-col items-center justify-center py-[30px] gap-[12px]">
-                    <p className="opacity-40 font-light text-[14px] text-center">No projects yet.</p>
-                    <Link href="/dashboard/projects" className="PopupAttentionGradient PopupAttentionShadow text-[13px] px-[16px] py-[8px] rounded-[10px]">
-                      Start a project
-                    </Link>
+                    <p className="opacity-80 text-[14px] text-center leading-relaxed">A portfolio, a personal space, or something new. Tell us your rough idea and we’ll help with the details.</p>
+                    <button onClick={() => setCreatingProject(true)} className="PopupAttentionGradient PopupAttentionShadow text-[13px] px-[16px] py-[10px] rounded-[10px]">
+                      Create your first project
+                    </button>
                   </div>
                 ) : (
                   <div className="flex flex-col gap-[18px]">
@@ -128,7 +118,7 @@ const DASHBOARDClientDashboard = () => {
                         {activeProject.logoAttachment ? (
                           <Image src={activeProject.logoAttachment} alt="Logo" layout="responsive" width={0} height={0} />
                         ) : (
-                          <span className="text-[18px] opacity-50">📁</span>
+                          <DashboardIcon />
                         )}
                       </div>
                       <div className="min-w-0">
@@ -137,6 +127,12 @@ const DASHBOARDClientDashboard = () => {
                       </div>
                     </div>
 
+                    {!isBuilding && <p className="text-[14px] opacity-80 leading-relaxed">{activeProject.approval === 'Draft'
+                      ? 'Your answers are saved. Continue whenever you’re ready; a rough idea is enough to send your brief.'
+                      : activeProject.approval === 'Declined'
+                      ? 'This request wasn’t approved. Open your project or message us to discuss what could work.'
+                      : 'We’ll review your idea and follow up in messages. Build progress will appear here once your project is approved.'}</p>}
+                    {isBuilding && <>
                     {/* Progress */}
                     <div>
                       <div className="flex justify-between mb-[8px]">
@@ -163,11 +159,12 @@ const DASHBOARDClientDashboard = () => {
                       <div className="BlackWithLightGradient rounded-[12px] px-[14px] py-[12px]">
                         <p className="text-[11px] opacity-40 mb-[3px]">Payments</p>
                         <p className="text-[13px] font-medium">
-                          {activeProject.weeksPaid || 0} / {activeProject.paymentPlan || '—'} wks
+                          {paymentCount(activeProject) ? `${paidCount(activeProject)} / ${paymentCount(activeProject)} paid` : 'To be arranged'}
                         </p>
                       </div>
                     </div>
 
+                    </>}
                     {activeProject.recentActivity && (
                       <div className="border-t border-white/10 pt-[14px]">
                         <p className="text-[11px] opacity-40 mb-[4px]">Recent Activity</p>
@@ -179,7 +176,7 @@ const DASHBOARDClientDashboard = () => {
                       href={`/dashboard/projects/${activeProject.uid}${activeProject.approval === 'Draft' ? '/setup' : ''}?projectId=${activeProject.uid}&userId=${userId}`}
                       className="PopupAttentionGradient PopupAttentionShadow text-[13px] font-medium px-[16px] py-[10px] rounded-[12px] text-center"
                     >
-                      View Project Details →
+                      {activeProject.approval === 'Draft' ? 'Continue your brief' : isBuilding ? 'View Project Details →' : 'View your project'}
                     </Link>
                   </div>
                 )}
@@ -192,7 +189,7 @@ const DASHBOARDClientDashboard = () => {
                 <h2 className="text-[17px] font-semibold">All Projects</h2>
                 <Link href="/dashboard/projects" className="text-[12px] opacity-50 hover:opacity-100 flex items-center gap-[4px]">
                   Manage
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </Link>
               </div>
               <div className="flex-1 flex flex-col">
@@ -215,12 +212,12 @@ const DASHBOARDClientDashboard = () => {
                         {project.logoAttachment ? (
                           <Image src={project.logoAttachment} alt="Logo" layout="responsive" width={0} height={0} />
                         ) : (
-                          <span className="text-[14px] opacity-50">📁</span>
+                          <DashboardIcon size={18} />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-[14px] font-medium truncate">{project.projectName}</p>
-                        <div className="flex items-center gap-[8px] mt-[4px]">
+                        {project.approval === 'Approved' ? <div className="flex items-center gap-[8px] mt-[4px]">
                           <div className="flex-1 h-[3px] rounded-full bg-white/10">
                             <div
                               className="h-full rounded-full"
@@ -231,7 +228,7 @@ const DASHBOARDClientDashboard = () => {
                             />
                           </div>
                           <p className="text-[11px] opacity-50 flex-shrink-0">{project.progress || 0}%</p>
-                        </div>
+                        </div> : <p className="text-[12px] opacity-70 mt-[4px]">{project.approval === 'Draft' ? 'Ready when you are' : project.approval === 'Declined' ? 'Contact us about next steps' : 'Awaiting review'}</p>}
                       </div>
                       <span className={getApprovalStyle(project.approval)}>{project.approval || 'Pending'}</span>
                     </Link>
@@ -241,15 +238,32 @@ const DASHBOARDClientDashboard = () => {
             </div>
           </div>
 
+          {/* Stat Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-[15px] mb-[30px]">
+            {[
+              { label: 'Total Projects', value: dataLoading ? '—' : projects.length, icon: 'folder' as const, color: '#725CF7' },
+              { label: 'Active', value: dataLoading ? '—' : activeCount, icon: 'check' as const, color: '#22c55e' },
+              { label: 'Pending Review', value: dataLoading ? '—' : pendingCount, icon: 'clock' as const, color: '#f59e0b' },
+            ].map((stat) => (
+              <div key={stat.label} className="DashboardPurpleCard ContentCardShadow rounded-[20px] px-[25px] py-[22px] flex flex-col gap-[10px]">
+                <div className="flex items-center justify-between">
+                  <p className="text-[13px] font-light opacity-60">{stat.label}</p>
+                  <DashboardIcon name={stat.icon} size={20} />
+                </div>
+                <p className="text-[32px] font-semibold" style={{ color: stat.color }}>{stat.value}</p>
+              </div>
+            ))}
+          </div>
+
           {/* Quick Links */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-[15px]">
             {[
-              { label: 'My Projects', desc: 'View and track your projects', href: '/dashboard/projects', icon: '📋' },
-              { label: 'Messages', desc: 'Chat with the Lucidify team', href: '/dashboard/messages', icon: '💬' },
-              { label: 'Settings', desc: 'Update your profile & preferences', href: '/dashboard/settings', icon: '⚙️' },
+              { label: 'My Projects', desc: 'View and track your projects', href: '/dashboard/projects', icon: 'folder' as const },
+              { label: 'Messages', desc: 'Chat with the Lucidify team', href: '/dashboard/messages', icon: 'message' as const },
+              { label: 'Settings', desc: 'Update your profile & preferences', href: '/dashboard/settings', icon: 'settings' as const },
             ].map((item) => (
               <Link key={item.href} href={item.href} className="BlackWithLightGradient ContentCardShadow rounded-[20px] px-[22px] py-[20px] flex flex-col gap-[8px] hover:bg-white/[0.05]">
-                <span className="text-[22px]">{item.icon}</span>
+                <DashboardIcon name={item.icon} />
                 <p className="text-[15px] font-semibold">{item.label}</p>
                 <p className="text-[12px] font-light opacity-50">{item.desc}</p>
               </Link>

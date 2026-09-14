@@ -4,7 +4,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import React, { useState, useEffect } from 'react';
 import NavStartAProjectButton from './NavStartAProjectButton';
-import Popup from './Popup';
 import SignUpButton from './SignUpButton';
 import { useTheme } from '@/context/themeContext';
 
@@ -15,7 +14,6 @@ const navLinks = [
 ];
 
 const Navbar = () => {
-    const [isPopupOpen, setIsPopupOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [scrollProgress, setScrollProgress] = useState(0);
     const { theme } = useTheme();
@@ -30,7 +28,6 @@ const Navbar = () => {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    const togglePopup = () => setIsPopupOpen(!isPopupOpen);
     const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
     const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
@@ -42,12 +39,11 @@ const Navbar = () => {
     return (
         <>
             <div className="ScrollProgressBar" style={{ width: `${scrollProgress}%` }} />
-            <Popup closePopup={togglePopup} isVisible={isPopupOpen} />
 
             <header className="fixed top-0 left-0 right-0 z-50 pointer-events-none flex justify-center pt-4 px-3 sm:px-6 lg:px-10">
 
                 {/* Desktop Navigation — 3-column grid so center links are truly centered */}
-                <nav className={`NavbarPill hidden lg:grid pointer-events-auto w-full grid-cols-3 items-center px-8 h-[66px] rounded-[20px] transition-all duration-300 ${isPopupOpen ? 'blur-sm opacity-60 pointer-events-none' : ''}`}>
+                <nav className={`NavbarPill hidden lg:grid pointer-events-auto w-full grid-cols-3 items-center px-8 h-[66px] rounded-[20px] transition-all duration-300 `}>
                     {/* Left — Logo */}
                     <Link href="/" className="relative w-[115px]">
                         <Image
@@ -73,7 +69,7 @@ const Navbar = () => {
                     {/* Right — Buttons */}
                     <div className="flex justify-end items-center gap-[10px]">
                         <SignUpButton />
-                        <NavStartAProjectButton onClick={togglePopup} />
+                        <NavStartAProjectButton label="Log In" href="/login" />
                     </div>
                 </nav>
 
@@ -91,7 +87,7 @@ const Navbar = () => {
                             />
                         </Link>
                         <div className="flex items-center gap-[8px]">
-                            <NavStartAProjectButton onClick={() => { closeMobileMenu(); togglePopup(); }} />
+                            <NavStartAProjectButton label="Log In" href="/login" onClick={closeMobileMenu} />
                             <button
                                 onClick={toggleMobileMenu}
                                 aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}

@@ -143,7 +143,7 @@ const DashboardPreviewSection = () => {
                     </div>
 
                     {/* Dashboard interior */}
-                    <div className="DashboardBackgroundGradient flex" style={{ height: '440px' }}>
+                    <div className="DashboardBackgroundGradient flex" style={{ height: '440px', minHeight: 0 }}>
 
                         {/* Sidebar icon-only */}
                         {/* <div
