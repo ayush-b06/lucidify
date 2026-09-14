@@ -94,6 +94,76 @@ The previous production Firestore rules granted anonymous read/write access with
 Validation: 33 browser tests passed across the regression and focused runs, including all seven messaging checks and all three progress checks. The first broad run was interrupted after 29 passing tests when the storage choice changed; the remaining progress checks and revised Cloudinary checks passed subsequently. The final production build passes with no lint errors (existing image optimization advisories remain). Screenshots: `artifacts/name-search.png` and `artifacts/chat-attachments-mobile.png`.
 
 
+## Project tabs, simpler progress, and a category-led brief
+
+### Tab bar consistency
+
+The Overview, Progress, and Uploads tab bars were three copies of the same markup that had drifted
+apart. They are now one `ProjectTabs` component used by all six views (three client, three admin).
+
+- Uploads carried a disabled **Analytics** tab that Overview and Progress did not. It is gone.
+- Progress and Uploads omitted `flex items-center` from the tab style. A `<Link>` renders an inline
+  `<a>`, so the pill was 34px tall but the label sat at the top of it. Both now centre correctly.
+- The admin views used underlined text links hardcoded to `text-[#ffffff66]`, which was nearly
+  invisible in light mode. They now use the same theme-aware pills as the client.
+- Client tab links carried `?projectId=…&userId=…` that the page ignored — client ownership comes
+  from the authenticated account. The dead parameters are gone, so a client's uid is no longer in
+  their own URL bar. Admin links keep `?userId=` because they genuinely need it.
+- Loading and error states now render the top bar, so the page no longer jumps when they resolve.
+  The Overview top bar is titled "Overview" to match its tab rather than "Project Details".
+
+Uploads also subscribes to its design collections instead of reading them once, so a design the team
+uploads appears without a reload, and one collection failing no longer discards the other's results.
+
+### Progress is stages only
+
+Per-stage milestone checklists are removed from both sides, along with `stageMilestones`,
+`defaultMilestones`, `normalizeMilestones`, and the `nextUp` lists. Tracking "homepage delivered,
+inner pages delivered" is not how the work actually goes.
+
+The client sees the five-stage pipeline, a percentage, a plain-English description of the current
+stage, "Up next: <next stage>", and the team's recent-activity note. The admin picks a stage; the
+manual percentage slider remains for anything in between.
+
+Stage percentages changed from 0/25/50/75/100 to **20/40/60/80/100**. With milestones gone, the old
+mapping pinned the whole Planning stage at 0%, which reads to a client as "nothing has happened".
+Each stage is now an equal step toward launch. Projects created before `progressMode` existed still
+default to `manual` and keep the percentage they were last given, so nothing a client already saw
+changes. New projects are created with `progressMode: 'automatic'`.
+
+### The brief is category-led
+
+Creating a project asks only for a name; the description field is gone.
+
+The five-step brief is now driven entirely by `utils/projectCategories.ts`, which holds nine
+categories plus "Something else", and for each one: which style directions to show, which files to
+ask for, and which pages to suggest.
+
+1. **Type** — pick a category. Free text only for "Something else". This is the one required answer.
+2. **Look** — pick up to three style directions, shown as thumbnails ordered by what suits the
+   category. The old "which direction feels closest" and "anything you like the look of" are gone.
+3. **Your files** — category-tailored upload slots: food and interior photos for a restaurant, event
+   and member photos for a club, work samples for a portfolio. Logo is requested only where it makes
+   sense — portfolios and personal blogs are not asked. Everything is optional, with a links field
+   for anyone who would rather point at a shared folder.
+4. **Pages** — page suggestions drawn from the category, plus "Anything else". Timing and budget
+   questions are removed.
+5. **Review** — unchanged in shape.
+
+Changing the category drops style and page picks that no longer exist in the new one. Uploaded files
+are always kept and stay labelled on the brief, because asset ids are shared across categories.
+
+Style directions are painted by `StylePreview` as abstract wireframe thumbnails: layout, weight, and
+colour rather than a fake finished design. Dribbble was considered and rejected — its v2 API has no
+public shot search, and putting other designers' portfolio work in front of a paying client as
+"pick what we'll build" is a liability. Each direction accepts an `image` URL, so real screenshots
+can replace the painted preview without touching component code.
+
+New project fields: `briefVersion: 3`, `categoryId`, `customCategory`, `stylePicks`, `pages`,
+`briefAssets` (a map of asset group to image URLs), and `assetLinks`. `additionalNotes` and
+`logoUrl` are reused. Production rules that restrict field names will need to allow these for
+project owners. Briefs at version 1 and 2 still render their original fields unchanged.
+
 ## Existing names and search correction
 
 The admin project list now displays whichever name fields are present instead of requiring both a first and last name. The composer’s persistent file-limit/keyboard-shortcut helper line is removed from both chat views; attachment validation remains.

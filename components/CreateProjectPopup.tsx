@@ -22,11 +22,9 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
     const isDark = theme === 'dark';
 
     const [projectName, setProjectName] = useState('');
-    const [projectDescription, setProjectDescription] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [nameFocused, setNameFocused] = useState(false);
-    const [descFocused, setDescFocused] = useState(false);
     const [entered, setEntered] = useState(false);
     const nameRef = useRef<HTMLInputElement>(null);
 
@@ -39,7 +37,6 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
         } else {
             setEntered(false);
             setProjectName('');
-            setProjectDescription('');
             setError('');
         }
     }, [isVisible]);
@@ -57,11 +54,12 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
         try {
             const project = await addDoc(collection(db, 'users', user.uid, 'projects'), {
                 projectName: projectName.trim(),
-                projectDescription: projectDescription.trim(),
                 dateCreated: new Date().toISOString(),
                 status: 1,
                 approval: 'Pending',
-                progress: '0',
+                // New projects track the build stage automatically; the admin can still override it.
+                progressMode: 'automatic',
+                progress: 20,
                 setupComplete: false,
             });
             closeCreatProjectPopup();
@@ -101,7 +99,6 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
     };
 
     const nameCharsLeft = 60 - projectName.length;
-    const descCharsLeft = 500 - projectDescription.length;
 
     return (
         <div
@@ -217,35 +214,6 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
                                 </span>
                             </div>
                         )}
-                    </div>
-
-                    {/* Description */}
-                    <div className="flex flex-col gap-[8px]">
-                        <div className="flex items-center justify-between">
-                            <label className="text-[11px] font-semibold tracking-[0.9px]" style={{ color: mutedColor }}>
-                                DESCRIPTION
-                                <span className="font-normal ml-[6px]" style={{ color: subtleColor }}>optional</span>
-                            </label>
-                            {projectDescription.length > 0 && (
-                                <span
-                                    className="text-[11px] tabular-nums transition-colors"
-                                    style={{ color: descCharsLeft < 50 ? '#f87171' : subtleColor }}
-                                >
-                                    {descCharsLeft}
-                                </span>
-                            )}
-                        </div>
-                        <textarea aria-label="Project description"
-                            value={projectDescription}
-                            onChange={(e) => setProjectDescription(e.target.value)}
-                            onFocus={() => setDescFocused(true)}
-                            onBlur={() => setDescFocused(false)}
-                            placeholder="What would you like built? A quick idea is enough."
-                            rows={3}
-                            maxLength={500}
-                            className="w-full rounded-[13px] px-[16px] py-[13px] text-[14px] resize-none leading-[1.6]"
-                            style={descFocused ? inputFocus : inputIdle}
-                        />
                     </div>
 
                     {/* Error */}

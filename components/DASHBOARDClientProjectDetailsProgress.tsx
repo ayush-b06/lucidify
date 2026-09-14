@@ -2,11 +2,11 @@
 
 import React from 'react';
 import { useLiveProject } from '@/hooks/useLiveProject';
-import { STAGES, STAGE_DETAILS } from '@/utils/projectProgress';
-import Link from 'next/link';
+import { STAGES, STAGE_DETAILS, nextStage } from '@/utils/projectProgress';
 import Image from 'next/image';
 import DashboardClientSideNav from '@/components/DashboardClientSideNav';
 import DashboardTopBar from './DashboardTopBar';
+import ProjectTabs from './ProjectTabs';
 import { useTheme } from '@/context/themeContext';
 
 interface DASHBOARDClientProjectDetailsProgressProps {
@@ -42,50 +42,30 @@ const DASHBOARDClientProjectDetailsProgress = ({ userId, projectId }: DASHBOARDC
     const trackBg = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
     const cardItemBg = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)';
 
-    const tabBase = "px-[14px] h-[34px] rounded-[9px] text-[13px] font-medium whitespace-nowrap transition-all";
-    const activeTabStyle: React.CSSProperties = {
-        background: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
-        color: textColor,
-        boxShadow: isDark ? '0 1px 4px rgba(0,0,0,0.3)' : '0 1px 4px rgba(0,0,0,0.08)',
-    };
-    const inactiveTabStyle: React.CSSProperties = { background: 'transparent', color: mutedColor };
-    const disabledTabStyle: React.CSSProperties = { background: 'transparent', color: mutedColor, opacity: 0.35, cursor: 'not-allowed' };
-    const tabBarStyle: React.CSSProperties = {
-        background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
-        border: isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(0,0,0,0.07)',
-        borderRadius: '13px', padding: '3px', display: 'inline-flex', gap: '2px',
-    };
-
-    if (loading) {
+    // Loading and error states keep the top bar so the page does not jump when they resolve.
+    if (loading || error || !projectDetails) {
         return (
             <div className="flex flex-col xl:flex-row h-screen DashboardBackgroundGradient overflow-hidden">
                 <DashboardClientSideNav highlight="projects" />
-                <div className="flex-1 flex items-center justify-center pt-[60px] xl:pt-0">
-                    <p className="opacity-40 font-light text-[14px]">Loading project...</p>
+                <div className="flex-1 flex flex-col pt-[60px] xl:pt-0 min-h-0 overflow-hidden">
+                    <DashboardTopBar title="Progress" />
+                    <div className="flex-1 flex items-center justify-center px-[20px]">
+                        {loading
+                            ? <p className="opacity-40 font-light text-[14px]">Loading project...</p>
+                            : <p role="alert" className="text-red-400 text-[14px] text-center">{error || 'Something went wrong.'}</p>}
+                    </div>
                 </div>
             </div>
         );
     }
 
-    if (error || !projectDetails) {
-        return (
-            <div className="flex flex-col xl:flex-row h-screen DashboardBackgroundGradient overflow-hidden">
-                <DashboardClientSideNav highlight="projects" />
-                <div className="flex-1 flex items-center justify-center pt-[60px] xl:pt-0">
-                    <p className="text-red-400 text-[14px]">{error || 'Something went wrong.'}</p>
-                </div>
-            </div>
-        );
-    }
-
-    const { projectName, progress, status, approval, dueDate, dateCreated, recentActivity, logoAttachment, stageMilestones } = projectDetails;
+    const { projectName, progress, status, approval, dueDate, dateCreated, recentActivity, logoAttachment } = projectDetails;
 
     const currentStage = status || 1;
     const currentProgress = Math.min(100, Math.max(0, Number(progress) || 0));
     const stageData = STAGE_DETAILS[currentStage] || STAGE_DETAILS[1];
     const stageName = STAGES.find(s => s.id === currentStage)?.label || 'Planning';
-    // Read milestone completion from Firestore (set by admin), fall back to all false
-    const currentMilestoneStates: boolean[] = (stageMilestones?.[String(currentStage)] as boolean[] | undefined) || stageData.milestones.map(() => false);
+    const upcoming = nextStage(currentStage);
 
     const getApprovalStyle = () => {
         if (approval === 'Approved') return 'text-green-400 bg-green-400/10 px-[12px] py-[4px] rounded-full text-[12px]';
@@ -102,18 +82,7 @@ const DASHBOARDClientProjectDetailsProgress = ({ userId, projectId }: DASHBOARDC
 
                 {/* Scrollable Content */}
                 <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">
-                    {/* Tab Nav */}
-                    <div className="mb-[28px]">
-                        <div style={tabBarStyle}>
-                            <Link href={`/dashboard/projects/${projectId}?projectId=${projectId}&userId=${userId}`}
-                                className={tabBase} style={inactiveTabStyle}>Overview</Link>
-                            <Link href={`/dashboard/projects/${projectId}/progress?projectId=${projectId}&userId=${userId}`}
-                                className={tabBase} style={activeTabStyle}>Progress</Link>
-                            <Link href={`/dashboard/projects/${projectId}/uploads?projectId=${projectId}&userId=${userId}`}
-                                className={tabBase} style={inactiveTabStyle}>Uploads</Link>
-
-                        </div>
-                    </div>
+                    <ProjectTabs projectId={projectId} active="progress" />
 
                     {/* Hero Progress Banner */}
                     <div className="BlackGradient ContentCardShadow rounded-[24px] px-[24px] sm:px-[35px] py-[28px] mb-[20px]">
@@ -203,76 +172,24 @@ const DASHBOARDClientProjectDetailsProgress = ({ userId, projectId }: DASHBOARDC
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-[20px] mb-[20px]">
-                        {/* Current Stage Details */}
-                        <div className="BlackGradient ContentCardShadow rounded-[24px] px-[24px] sm:px-[30px] py-[26px] flex flex-col gap-[18px]">
-                            <div>
-                                <div className="flex items-center gap-[10px] mb-[6px]">
-                                    <span className="text-[20px]">{STAGES.find(s => s.id === currentStage)?.icon}</span>
-                                    <h2 className="text-[16px] font-semibold">Stage {currentStage}: {stageName}</h2>
-                                </div>
-                                <p className="text-[13px] font-light opacity-60 leading-[1.6]">{stageData.headline}</p>
+                    {/* What's happening right now */}
+                    <div className="BlackGradient ContentCardShadow rounded-[24px] px-[24px] sm:px-[30px] py-[26px] mb-[20px] flex flex-col gap-[18px]">
+                        <div>
+                            <div className="flex items-center gap-[10px] mb-[6px]">
+                                <span className="text-[20px]">{STAGES.find(s => s.id === currentStage)?.icon}</span>
+                                <h2 className="text-[16px] font-semibold">{stageName}</h2>
                             </div>
-                            <p className="text-[13px] font-light opacity-50 leading-[1.7] pt-[16px]"
-                                style={{ borderTop: `1px solid ${dividerColor}` }}>
-                                {stageData.description}
-                            </p>
-
-                            {/* Next up */}
-                            <div className="pt-[16px]" style={{ borderTop: `1px solid ${dividerColor}` }}>
-                                <p className="text-[11px] opacity-40 uppercase tracking-wide mb-[12px]">Coming Up Next</p>
-                                <div className="flex flex-col gap-[8px]">
-                                    {stageData.nextUp.map((item, i) => (
-                                        <div key={i} className="flex items-center gap-[10px]">
-                                            <div className="w-[6px] h-[6px] rounded-full flex-shrink-0" style={{ background: 'linear-gradient(135deg, #6265f0, #725CF7)' }} />
-                                            <span className="text-[13px] font-light opacity-60">{item}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                            <p className="text-[13px] font-light opacity-60 leading-[1.6]">{stageData.headline}</p>
                         </div>
-
-                        {/* Milestones */}
-                        <div className="BlackGradient ContentCardShadow rounded-[24px] px-[24px] sm:px-[30px] py-[26px] flex flex-col gap-[18px]">
-                            <div>
-                                <h2 className="text-[16px] font-semibold mb-[6px]">Stage Milestones</h2>
-                                <p className="text-[12px] opacity-40">Key deliverables for this phase</p>
-                            </div>
-                            <div className="flex flex-col gap-[12px]">
-                                {stageData.milestones.map((label, i) => {
-                                    const done = currentMilestoneStates[i] || false;
-                                    return (
-                                        <div key={i} className={`flex items-center gap-[14px] px-[16px] py-[12px] rounded-[12px]`}
-                                            style={{ background: done ? 'rgba(114,92,247,0.10)' : cardItemBg }}>
-                                            <div className={`w-[22px] h-[22px] rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-bold
-                                                ${done ? 'PopupAttentionGradient' : 'opacity-40'}
-                                            `}
-                                                style={!done ? { border: `1px solid ${isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.20)'}` } : undefined}
-                                            >
-                                                {done ? '✓' : ''}
-                                            </div>
-                                            <span className={`text-[13px] font-light ${done ? 'opacity-90' : 'opacity-40'}`}>{label}</span>
-                                            {done && <span className="ml-auto text-[10px] text-[#725CF7] font-medium flex-shrink-0">Done</span>}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Completion count */}
-                            <div className="pt-[14px] flex items-center justify-between" style={{ borderTop: `1px solid ${dividerColor}` }}>
-                                <span className="text-[12px] opacity-40">
-                                    {currentMilestoneStates.filter(Boolean).length} of {stageData.milestones.length} completed
-                                </span>
-                                <div className="w-[80px] h-[4px] rounded-full" style={{ background: trackBg }}>
-                                    <div
-                                        className="h-full rounded-full"
-                                        style={{
-                                            width: `${(currentMilestoneStates.filter(Boolean).length / Math.max(stageData.milestones.length, 1)) * 100}%`,
-                                            background: 'linear-gradient(to right, #6265f0, #725CF7)'
-                                        }}
-                                    />
-                                </div>
-                            </div>
+                        <p className="text-[14px] font-light opacity-60 leading-[1.7] pt-[16px]"
+                            style={{ borderTop: `1px solid ${dividerColor}` }}>
+                            {stageData.description}
+                        </p>
+                        <div className="pt-[16px] flex items-center gap-[10px]" style={{ borderTop: `1px solid ${dividerColor}` }}>
+                            <span className="text-[11px] opacity-40 uppercase tracking-wide">Up next</span>
+                            <span className="text-[13px] font-medium" style={{ color: '#725CF7' }}>
+                                {upcoming ? `${upcoming.icon} ${upcoming.label}` : 'Your website is live — we keep it that way'}
+                            </span>
                         </div>
                     </div>
 

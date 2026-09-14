@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react';
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { writeNotification } from '../utils/notifications';
 import { db } from '../firebaseConfig';
-import Link from 'next/link';
 import DashboardAdminSideNav from '@/components/DashboardAdminSideNav';
 import CreateWebDesignPopup from './CreateWebDesignPopup';
 import DashboardTopBar from './DashboardTopBar';
+import ProjectTabs from './ProjectTabs';
 
 interface DASHBOARDAdminProjectDetailsUploadsProps {
     userId: string;
@@ -125,15 +125,7 @@ const DASHBOARDAdminProjectDetailsUploads = ({ userId, projectId }: DASHBOARDAdm
                     {/* Scrollable Content */}
                     <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">
 
-                        {/* Tab Nav */}
-                        <div className="flex items-center gap-[20px] sm:gap-[30px] mb-[30px] overflow-x-auto pb-[4px]">
-                            <Link href={`/dashboard/projects/${projectId}?projectId=${projectId}&userId=${userId}`}
-                                className="font-normal text-[#ffffff66] text-sm sm:text-base whitespace-nowrap hover:text-white">Overview</Link>
-                            <Link href={`/dashboard/projects/${projectId}/progress?projectId=${projectId}&userId=${userId}`}
-                                className="font-normal text-[#ffffff66] text-sm sm:text-base whitespace-nowrap hover:text-white">Progress</Link>
-                            <Link href={`/dashboard/projects/${projectId}/uploads?projectId=${projectId}&userId=${userId}`}
-                                className="font-normal text-base whitespace-nowrap border-b-2 border-[#725CF7] pb-[2px]">Uploads</Link>
-                        </div>
+                        <ProjectTabs projectId={projectId} active="uploads" userId={userId} />
 
                         {/* Header row */}
                         <div className="flex items-center justify-between mb-[24px]">

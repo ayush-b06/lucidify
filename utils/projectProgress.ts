@@ -6,110 +6,61 @@ export const STAGES = [
     { id: 5, label: 'Maintaining', icon: '🛡️' },
 ];
 
-export const STAGE_DETAILS: Record<number, {
-    headline: string;
-    description: string;
-    milestones: string[];
-    nextUp: string[];
-}> = {
+export const STAGE_DETAILS: Record<number, { headline: string; description: string }> = {
     1: {
         headline: 'Laying the foundation',
-        description: "We're defining your project's goals, technical requirements, and timeline. This stage sets the direction for everything that follows.",
-        milestones: [
-            'Kickoff call completed',
-            'Project requirements documented',
-            'Scope & deliverables agreed',
-            'Timeline & milestones set',
-        ],
-        nextUp: ['Wireframe delivery', 'Brand asset review', 'Design phase kickoff'],
+        description: "We're working out what your website needs to do and how it should feel. Nothing is being built yet — this is the thinking part.",
     },
     2: {
         headline: 'Designing your vision',
-        description: "Our designers are crafting the visual identity and UI/UX of your website. You'll be reviewing mockups and providing feedback in this phase.",
-        milestones: [
-            'Brand direction approved',
-            'Homepage mockup delivered',
-            'Inner pages mockup delivered',
-            'Final design revisions approved',
-        ],
-        nextUp: ['Development handoff', 'Content gathering', 'Development phase kickoff'],
+        description: "We're shaping how your website looks. Designs will appear under Uploads for you to react to, and your feedback steers what comes next.",
     },
     3: {
         headline: 'Building your website',
-        description: "Developers are turning the approved designs into a fully functional website. This includes frontend, backend integrations, and quality testing.",
-        milestones: [
-            'Development environment set up',
-            'Homepage built & responsive',
-            'All pages coded & linked',
-            'Forms, integrations & CMS set up',
-            'Cross-browser & mobile testing',
-        ],
-        nextUp: ['Client review session', 'Final QA pass', 'Launch preparation'],
+        description: "The approved design is being turned into a real, working website — every page, link, and form behind it.",
     },
     4: {
         headline: 'Preparing for launch',
-        description: "Your website is nearly live! We're handling domain configuration, hosting setup, final testing, and performance optimizations before going live.",
-        milestones: [
-            'Final client review completed',
-            'Domain & DNS configured',
-            'SSL certificate active',
-            'Performance & SEO optimizations',
-            'Website live 🎉',
-        ],
-        nextUp: ['Go-live announcement', 'Analytics setup', 'Handover & training'],
+        description: "Final checks, your domain, and hosting. Your website is nearly ready for the world to see.",
     },
     5: {
         headline: 'Your website is live',
-        description: "Congratulations — your website is live and in the world! We're actively monitoring performance, applying updates, and handling any issues that arise.",
-        milestones: [
-            'Website successfully launched',
-            'Google Analytics connected',
-            'Uptime monitoring active',
-            'Monthly performance report',
-        ],
-        nextUp: ['Ongoing support & updates', 'SEO growth review', 'Feature enhancements'],
+        description: "Your website is out in the world. We keep an eye on it and handle updates and anything that comes up.",
     },
 };
 
-// Default milestone states (all false)
-export const defaultMilestones = (): Record<string, boolean[]> => ({
-    '1': [false, false, false, false],
-    '2': [false, false, false, false],
-    '3': [false, false, false, false, false],
-    '4': [false, false, false, false, false],
-    '5': [false, false, false, false],
-});
-
+// Each stage is an equal step toward launch. An active project never reads as 0%,
+// which is what a client would otherwise see for the whole of Planning.
+const STAGE_PERCENT: Record<number, number> = { 1: 20, 2: 40, 3: 60, 4: 80, 5: 100 };
 
 export function normalizeStage(value: unknown): number {
     const stage = Number(value);
     return Number.isInteger(stage) && stage >= 1 && stage <= 5 ? stage : 1;
 }
+
 export function normalizeProgress(value: unknown): number {
     const progress = Number(value);
     return Number.isFinite(progress) ? Math.min(100, Math.max(0, Math.round(progress))) : 0;
 }
-export function normalizeMilestones(value: unknown): Record<string, boolean[]> {
-    const result = defaultMilestones();
-    const source = value && typeof value === 'object' ? value as Record<string, unknown> : {};
-    for (const key of Object.keys(result)) {
-        const list = source[key];
-        result[key] = result[key].map((_, i) => Array.isArray(list) && list[i] === true);
-    }
-    return result;
+
+export function stageProgress(stage: number): number {
+    return STAGE_PERCENT[normalizeStage(stage)];
 }
-// The four build phases share 0–100%; ongoing maintenance starts at 100%.
-export function stageProgress(stage: number, milestones: Record<string, boolean[]>): number {
-    const current = normalizeStage(stage);
-    if (current === 5) return 100;
-    const checklist = normalizeMilestones(milestones)[String(current)];
-    return Math.round((current - 1) * 25 + 25 * checklist.filter(Boolean).length / checklist.length);
+
+/** The stage after this one, or null once the site is live and simply being looked after. */
+export function nextStage(stage: number) {
+    return STAGES.find(entry => entry.id === normalizeStage(stage) + 1) ?? null;
 }
+
 export function progressFields(data: Record<string, unknown>) {
     const status = normalizeStage(data.status);
-    const stageMilestones = normalizeMilestones(data.stageMilestones);
+    // Projects created before progressMode existed keep the percentage they were last
+    // given, so nothing a client already saw changes underneath them.
     const progressMode = data.progressMode === 'automatic' ? 'automatic' : 'manual';
-    return { status, stageMilestones, progressMode,
-        progress: progressMode === 'automatic' ? stageProgress(status, stageMilestones) : normalizeProgress(data.progress),
-        recentActivity: typeof data.recentActivity === 'string' ? data.recentActivity : '' };
+    return {
+        status,
+        progressMode,
+        progress: progressMode === 'automatic' ? stageProgress(status) : normalizeProgress(data.progress),
+        recentActivity: typeof data.recentActivity === 'string' ? data.recentActivity : '',
+    };
 }

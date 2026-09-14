@@ -1,12 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
-import Link from 'next/link';
 import DashboardClientSideNav from '@/components/DashboardClientSideNav';
 import DashboardTopBar from './DashboardTopBar';
-import { useTheme } from '@/context/themeContext';
+import ProjectTabs from './ProjectTabs';
 
 interface DASHBOARDClientProjectDetailsUploadsProps {
     userId: string;
@@ -27,79 +26,50 @@ const DASHBOARDClientProjectDetailsUploads = ({ userId, projectId }: DASHBOARDCl
     const [projectName, setProjectName] = useState<string>('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [designError, setDesignError] = useState<string | null>(null);
     const [selectedTab, setSelectedTab] = useState<'Sections' | 'Full-Page'>('Sections');
     const [sectionDesigns, setSectionDesigns] = useState<Design[]>([]);
     const [fullPageDesigns, setFullPageDesigns] = useState<Design[]>([]);
     const [lightboxURL, setLightboxURL] = useState<string | null>(null);
 
-    const { theme } = useTheme();
-    const isDark = theme === 'dark';
-    const textColor = isDark ? '#ffffff' : '#111111';
-    const mutedColor = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)';
-
-    const tabBase = "px-[14px] h-[34px] rounded-[9px] text-[13px] font-medium whitespace-nowrap transition-all";
-    const activeTabStyle: React.CSSProperties = {
-        background: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
-        color: textColor,
-        boxShadow: isDark ? '0 1px 4px rgba(0,0,0,0.3)' : '0 1px 4px rgba(0,0,0,0.08)',
-    };
-    const inactiveTabStyle: React.CSSProperties = { background: 'transparent', color: mutedColor };
-    const disabledTabStyle: React.CSSProperties = { background: 'transparent', color: mutedColor, opacity: 0.35, cursor: 'not-allowed' };
-    const tabBarStyle: React.CSSProperties = {
-        background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
-        border: isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(0,0,0,0.07)',
-        borderRadius: '13px', padding: '3px', display: 'inline-flex', gap: '2px',
-    };
-
+    // Designs stream in live, so a design uploaded by Lucidify appears without a reload.
+    // A collection that fails keeps whatever already loaded and reports itself separately.
     useEffect(() => {
-        const fetchAll = async () => {
-            if (!userId || !projectId) return;
-            try {
-                const basePath = `users/${userId}/projects/${projectId}`;
+        if (!userId || !projectId) return;
+        setLoading(true); setError(null); setDesignError(null);
 
-                const projectDoc = await getDoc(doc(db, 'users', userId, 'projects', projectId));
-                if (projectDoc.exists()) setProjectName(projectDoc.data().projectName || '');
-                else { setError('Project not found.'); return; }
+        const unsubscribeProject = onSnapshot(doc(db, 'users', userId, 'projects', projectId), snapshot => {
+            setLoading(false);
+            if (!snapshot.exists()) { setError('Project not found.'); return; }
+            setProjectName(snapshot.data().projectName || '');
+            setError(null);
+        }, () => { setLoading(false); setError('Could not load this project. Please reload to retry.'); });
 
-                try {
-                    const snap = await getDocs(collection(db, `${basePath}/section web designs`));
-                    setSectionDesigns(snap.docs.map(d => d.data() as Design));
-                } catch { setError('Could not load section designs. Please reload to retry.'); }
+        const watch = (name: string, apply: (designs: Design[]) => void) => onSnapshot(
+            collection(db, 'users', userId, 'projects', projectId, name),
+            snapshot => apply(snapshot.docs.map(entry => entry.data() as Design)),
+            () => setDesignError('Some designs could not be loaded. Please reload to retry.'),
+        );
+        const unsubscribeSections = watch('section web designs', setSectionDesigns);
+        const unsubscribeFullPage = watch('full-page web designs', setFullPageDesigns);
 
-                try {
-                    const snap = await getDocs(collection(db, `${basePath}/full-page web designs`));
-                    setFullPageDesigns(snap.docs.map(d => d.data() as Design));
-                } catch { setError('Could not load full-page designs. Please reload to retry.'); }
-
-            } catch (err) {
-                console.error(err);
-                setError('Failed to load project.');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchAll();
+        return () => { unsubscribeProject(); unsubscribeSections(); unsubscribeFullPage(); };
     }, [userId, projectId]);
 
     const displayedDesigns = selectedTab === 'Sections' ? sectionDesigns : fullPageDesigns;
 
-    if (loading) {
+    // Loading and error states keep the top bar so the page does not jump when they resolve.
+    if (loading || error) {
         return (
             <div className="flex flex-col xl:flex-row h-screen DashboardBackgroundGradient overflow-hidden">
                 <DashboardClientSideNav highlight="projects" />
-                <div className="flex-1 flex items-center justify-center pt-[60px] xl:pt-0">
-                    <p className="opacity-40 font-light text-[14px]">Loading designs...</p>
-                </div>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="flex flex-col xl:flex-row h-screen DashboardBackgroundGradient overflow-hidden">
-                <DashboardClientSideNav highlight="projects" />
-                <div className="flex-1 flex items-center justify-center pt-[60px] xl:pt-0">
-                    <p className="text-red-400 text-[14px]">{error}</p>
+                <div className="flex-1 flex flex-col pt-[60px] xl:pt-0 min-h-0 overflow-hidden">
+                    <DashboardTopBar title="Uploads" />
+                    <div className="flex-1 flex items-center justify-center px-[20px]">
+                        {loading
+                            ? <p className="opacity-40 font-light text-[14px]">Loading designs...</p>
+                            : <p role="alert" className="text-red-400 text-[14px] text-center">{error}</p>}
+                    </div>
                 </div>
             </div>
         );
@@ -132,21 +102,13 @@ const DASHBOARDClientProjectDetailsUploads = ({ userId, projectId }: DASHBOARDCl
                     {/* Scrollable Content */}
                     <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">
 
-                        {/* Tab Nav */}
-                        <div className="mb-[28px]">
-                            <div style={tabBarStyle}>
-                                <Link href={`/dashboard/projects/${projectId}?projectId=${projectId}&userId=${userId}`}
-                                    className={tabBase} style={inactiveTabStyle}>Overview</Link>
-                                <Link href={`/dashboard/projects/${projectId}/progress?projectId=${projectId}&userId=${userId}`}
-                                    className={tabBase} style={inactiveTabStyle}>Progress</Link>
-                                <Link href={`/dashboard/projects/${projectId}/uploads?projectId=${projectId}&userId=${userId}`}
-                                    className={tabBase} style={activeTabStyle}>Uploads</Link>
-                                <button disabled className={tabBase} style={disabledTabStyle}>Analytics</button>
-                            </div>
-                        </div>
+                        <ProjectTabs projectId={projectId} active="uploads" />
+
+                        {designError && <p role="alert" className="text-red-400 text-[13px] mb-[16px]">{designError}</p>}
 
                         {/* Header */}
                         <div className="mb-[24px]">
+                            {projectName && <p className="text-[12px] opacity-40 mb-[4px]">{projectName}</p>}
                             <h1 className="text-[22px] sm:text-[26px] font-semibold">Website Designs</h1>
                             <p className="text-[13px] opacity-50 mt-[4px]">
                                 {sectionDesigns.length + fullPageDesigns.length > 0

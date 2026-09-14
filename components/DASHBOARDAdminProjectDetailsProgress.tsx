@@ -4,11 +4,11 @@ import { useEffect, useState, useRef } from 'react';
 import { doc, getDoc, runTransaction, DocumentData } from 'firebase/firestore';
 import { queueNotification } from '../utils/notifications';
 import { db } from '../firebaseConfig';
-import { STAGES, STAGE_DETAILS, defaultMilestones, progressFields, normalizeStage, normalizeProgress, stageProgress } from '@/utils/projectProgress';
-import Link from 'next/link';
+import { STAGES, STAGE_DETAILS, progressFields, normalizeStage, normalizeProgress, stageProgress, nextStage } from '@/utils/projectProgress';
 import Image from 'next/image';
 import DashboardAdminSideNav from '@/components/DashboardAdminSideNav';
 import DashboardTopBar from './DashboardTopBar';
+import ProjectTabs from './ProjectTabs';
 
 interface DASHBOARDAdminProjectDetailsProgressProps {
     userId: string;
@@ -32,7 +32,6 @@ const DASHBOARDAdminProjectDetailsProgress = ({ userId, projectId }: DASHBOARDAd
     const [editStage, setEditStage] = useState(1);
     const [editProgress, setEditProgress] = useState(0);
     const [editActivity, setEditActivity] = useState('');
-    const [editMilestones, setEditMilestones] = useState<Record<string, boolean[]>>(defaultMilestones());
 
     useEffect(() => {
         let active = true;
@@ -49,7 +48,7 @@ const DASHBOARDAdminProjectDetailsProgress = ({ userId, projectId }: DASHBOARDAd
                     const fields = progressFields(data);
                     baseline.current = JSON.stringify(fields);
                     setEditStage(fields.status); setEditProgress(fields.progress);
-                    setEditActivity(fields.recentActivity); setEditMilestones(fields.stageMilestones);
+                    setEditActivity(fields.recentActivity);
                     setProgressMode(fields.progressMode);
                 } else {
                     setError('Project not found.');
@@ -65,9 +64,9 @@ const DASHBOARDAdminProjectDetailsProgress = ({ userId, projectId }: DASHBOARDAd
         return () => { active = false; };
     }, [userId, projectId, attempt]);
 
-    const draft = { status: editStage, progress: editProgress, recentActivity: editActivity, stageMilestones: editMilestones, progressMode };
+    const draft = { status: editStage, progress: editProgress, recentActivity: editActivity, progressMode };
     const dirty = !!projectDetails && JSON.stringify(progressFields(draft)) !== baseline.current;
-    useEffect(() => { if (dirty) setSavedMsg(false); }, [dirty, editStage, editProgress, editActivity, editMilestones]);
+    useEffect(() => { if (dirty) setSavedMsg(false); }, [dirty, editStage, editProgress, editActivity]);
     useEffect(() => {
         if (!dirty) return;
         const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
@@ -97,13 +96,9 @@ const DASHBOARDAdminProjectDetailsProgress = ({ userId, projectId }: DASHBOARDAd
     };
     const selectStage = (value: number) => {
         const stage = normalizeStage(value);
-        setEditStage(stage); setEditProgress(stageProgress(stage, editMilestones)); setProgressMode('automatic'); setSaveError('');
+        setEditStage(stage); setEditProgress(stageProgress(stage)); setProgressMode('automatic'); setSaveError('');
     };
     const setManualProgress = (value: number) => { setEditProgress(normalizeProgress(value)); setProgressMode('manual'); };
-    const toggleMilestone = (stageKey: string, index: number) => {
-        const next = { ...editMilestones, [stageKey]: editMilestones[stageKey].map((done, i) => i === index ? !done : done) };
-        setEditMilestones(next); setEditProgress(stageProgress(editStage, next)); setProgressMode('automatic');
-    };
 
     if (loading) {
         return (
@@ -133,7 +128,7 @@ const DASHBOARDAdminProjectDetailsProgress = ({ userId, projectId }: DASHBOARDAd
     const currentProgress = editProgress;
     const stageData = STAGE_DETAILS[currentStage] || STAGE_DETAILS[1];
     const stageName = STAGES.find(s => s.id === currentStage)?.label || 'Planning';
-    const currentMilestones = editMilestones[String(currentStage)] || [];
+    const upcoming = nextStage(currentStage);
 
     const getApprovalStyle = () => {
         if (approval === 'Approved') return 'text-green-400 bg-green-400/10 px-[12px] py-[4px] rounded-full text-[12px]';
@@ -153,21 +148,7 @@ const DASHBOARDAdminProjectDetailsProgress = ({ userId, projectId }: DASHBOARDAd
                 {/* Scrollable Content */}
                 <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">
 
-                    {/* Tab Nav */}
-                    <div className="flex items-center gap-[20px] sm:gap-[30px] mb-[30px] overflow-x-auto pb-[4px]">
-                        <Link href={`/dashboard/projects/${projectId}?projectId=${projectId}&userId=${userId}`}
-                            className="font-normal text-[#ffffff66] text-sm sm:text-base whitespace-nowrap hover:text-white">
-                            Overview
-                        </Link>
-                        <Link href={`/dashboard/projects/${projectId}/progress?projectId=${projectId}&userId=${userId}`}
-                            className="font-normal text-base whitespace-nowrap border-b-2 border-[#725CF7] pb-[2px]">
-                            Progress
-                        </Link>
-                        <Link href={`/dashboard/projects/${projectId}/uploads?projectId=${projectId}&userId=${userId}`}
-                            className="font-normal text-[#ffffff66] text-sm sm:text-base whitespace-nowrap hover:text-white">
-                            Uploads
-                        </Link>
-                    </div>
+                    <ProjectTabs projectId={projectId} active="progress" userId={userId} />
 
                     <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-[20px]">
 
@@ -250,46 +231,18 @@ const DASHBOARDAdminProjectDetailsProgress = ({ userId, projectId }: DASHBOARDAd
                                 </div>
                             </div>
 
-                            {/* Stage info + Milestones preview */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[20px]">
-                                <div className="BlackGradient ContentCardShadow rounded-[24px] px-[24px] py-[24px] flex flex-col gap-[14px]">
-                                    <div className="flex items-center gap-[10px]">
-                                        <span className="text-[20px]">{STAGES.find(s => s.id === currentStage)?.icon}</span>
-                                        <h2 className="text-[15px] font-semibold">Stage {currentStage}: {stageName}</h2>
-                                    </div>
-                                    <p className="text-[12px] font-light opacity-50 leading-[1.6]">{stageData.description}</p>
-                                    <div className="border-t border-white/5 pt-[14px]">
-                                        <p className="text-[11px] opacity-40 uppercase tracking-wide mb-[10px]">Coming Up</p>
-                                        {stageData.nextUp.map((item, i) => (
-                                            <div key={i} className="flex items-center gap-[8px] mb-[6px]">
-                                                <div className="w-[5px] h-[5px] rounded-full flex-shrink-0" style={{ background: '#725CF7' }} />
-                                                <span className="text-[12px] opacity-50">{item}</span>
-                                            </div>
-                                        ))}
-                                    </div>
+                            {/* Stage info */}
+                            <div className="BlackGradient ContentCardShadow rounded-[24px] px-[24px] py-[24px] flex flex-col gap-[14px]">
+                                <div className="flex items-center gap-[10px]">
+                                    <span className="text-[20px]">{STAGES.find(s => s.id === currentStage)?.icon}</span>
+                                    <h2 className="text-[15px] font-semibold">{stageName}</h2>
                                 </div>
-                                <div className="BlackGradient ContentCardShadow rounded-[24px] px-[24px] py-[24px] flex flex-col gap-[12px]">
-                                    <div>
-                                        <h2 className="text-[15px] font-semibold mb-[4px]">Milestones</h2>
-                                        <p className="text-[11px] opacity-40">As client will see them</p>
-                                    </div>
-                                    {stageData.milestones.map((label, i) => {
-                                        const done = currentMilestones[i] || false;
-                                        return (
-                                            <div key={i} className={`flex items-center gap-[12px] px-[14px] py-[10px] rounded-[10px] ${done ? 'bg-[#725CF7]/10' : 'bg-white/[0.03]'}`}>
-                                                <div className={`w-[20px] h-[20px] rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-bold ${done ? 'PopupAttentionGradient' : 'border border-white/20 opacity-40'}`}>
-                                                    {done ? '✓' : ''}
-                                                </div>
-                                                <span className={`text-[12px] font-light ${done ? 'opacity-90' : 'opacity-40'}`}>{label}</span>
-                                            </div>
-                                        );
-                                    })}
-                                    <div className="border-t border-white/5 pt-[10px] flex items-center justify-between">
-                                        <span className="text-[11px] opacity-40">{currentMilestones.filter(Boolean).length} of {stageData.milestones.length} done</span>
-                                        <div className="w-[70px] h-[3px] rounded-full bg-white/10">
-                                            <div className="h-full rounded-full" style={{ width: `${(currentMilestones.filter(Boolean).length / Math.max(stageData.milestones.length, 1)) * 100}%`, background: 'linear-gradient(to right, #6265f0, #725CF7)' }} />
-                                        </div>
-                                    </div>
+                                <p className="text-[12px] font-light opacity-50 leading-[1.6]">{stageData.description}</p>
+                                <div className="border-t border-white/5 pt-[14px] flex items-center gap-[10px]">
+                                    <span className="text-[11px] opacity-40 uppercase tracking-wide">Up next</span>
+                                    <span className="text-[12px] font-medium" style={{ color: '#725CF7' }}>
+                                        {upcoming ? `${upcoming.icon} ${upcoming.label}` : 'Live — ongoing care'}
+                                    </span>
                                 </div>
                             </div>
 
@@ -327,7 +280,7 @@ const DASHBOARDAdminProjectDetailsProgress = ({ userId, projectId }: DASHBOARDAd
                             <div className="BlackGradient ContentCardShadow rounded-[20px] px-[22px] py-[20px] flex flex-col gap-[14px]">
                                 <div>
                                     <h3 className="text-[14px] font-semibold mb-[4px]">Build Stage</h3>
-                                    <p className="text-[11px] opacity-40">Updates the pipeline and progress. Planning 0%, Designing 25%, Developing 50%, Launching 75%, Maintaining 100%.</p>
+                                    <p className="text-[11px] opacity-40">This is all the client needs. Updates the pipeline and progress: Planning 20%, Designing 40%, Developing 60%, Launching 80%, Maintaining 100%.</p>
                                 </div>
                                 <div className="flex flex-col gap-[8px]">
                                     {STAGES.map(stage => (
@@ -354,7 +307,7 @@ const DASHBOARDAdminProjectDetailsProgress = ({ userId, projectId }: DASHBOARDAd
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <h3 className="text-[14px] font-semibold mb-[2px]">Progress</h3>
-                                        <p className="text-[11px] opacity-40">{progressMode === 'automatic' ? 'Calculated from the stage and its milestones.' : 'Manual percentage. Changing a stage or milestone recalculates it.'}</p>
+                                        <p className="text-[11px] opacity-40">{progressMode === 'automatic' ? 'Following the build stage.' : 'Manual percentage. Picking a stage recalculates it.'}</p>
                                     </div>
                                     <div className="text-[28px] font-bold" style={{ color: '#725CF7' }}>{editProgress}%</div>
                                 </div>
@@ -367,7 +320,7 @@ const DASHBOARDAdminProjectDetailsProgress = ({ userId, projectId }: DASHBOARDAd
                                     className="w-full accent-[#725CF7] h-[4px] rounded-full"
                                 />
                                 <div className="flex justify-between">
-                                    {[0, 25, 50, 75, 100].map(v => (
+                                    {[20, 40, 60, 80, 100].map(v => (
                                         <button key={v} disabled={saving} onClick={() => setManualProgress(v)}
                                             className={`text-[11px] px-[8px] py-[3px] rounded-[6px] ${editProgress === v ? 'PopupAttentionGradient' : 'opacity-30 hover:opacity-60'}`}>
                                             {v}%
@@ -376,35 +329,7 @@ const DASHBOARDAdminProjectDetailsProgress = ({ userId, projectId }: DASHBOARDAd
                                 </div>
                             </div>
 
-                            {progressMode === 'manual' && <button disabled={saving} className="text-sm underline" onClick={() => selectStage(editStage)}>Use stage and milestone progress</button>}
-                            {/* Milestones for current stage */}
-                            <div className="BlackGradient ContentCardShadow rounded-[20px] px-[22px] py-[20px] flex flex-col gap-[14px]">
-                                <div>
-                                    <h3 className="text-[14px] font-semibold mb-[2px]">Milestones — Stage {currentStage}</h3>
-                                    <p className="text-[11px] opacity-40">Completed milestones advance this stage’s progress. Maintenance tasks do not reduce a completed build.</p>
-                                </div>
-                                <div className="flex flex-col gap-[8px]">
-                                    {stageData.milestones.map((label, i) => {
-                                        const done = editMilestones[String(currentStage)]?.[i] || false;
-                                        return (
-                                            <button
-                                                key={i}
-                                                role="checkbox" aria-checked={done} disabled={saving} onClick={() => toggleMilestone(String(currentStage), i)}
-                                                className={`flex items-center gap-[12px] px-[14px] py-[11px] rounded-[12px] text-left transition-all
-                                                    ${done ? 'bg-[#725CF7]/15 ring-1 ring-[#725CF7]/30' : 'BlackWithLightGradient ContentCardShadow hover:bg-white/[0.04]'}
-                                                `}
-                                            >
-                                                <div className={`w-[20px] h-[20px] rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-bold transition-all
-                                                    ${done ? 'PopupAttentionGradient' : 'border border-white/20 opacity-40'}
-                                                `}>
-                                                    {done ? '✓' : ''}
-                                                </div>
-                                                <span className={`text-[12px] font-light ${done ? 'opacity-90' : 'opacity-50'}`}>{label}</span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
+                            {progressMode === 'manual' && <button disabled={saving} className="text-sm underline" onClick={() => selectStage(editStage)}>Use stage progress</button>}
 
                             {/* Recent Activity */}
                             <div className="BlackGradient ContentCardShadow rounded-[20px] px-[22px] py-[20px] flex flex-col gap-[12px]">

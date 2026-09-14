@@ -7,9 +7,11 @@ import { db } from '../firebaseConfig';
 import { useLiveProject } from '@/hooks/useLiveProject';
 import Link from 'next/link';
 import ProjectBrief, { ProjectBriefData } from './ProjectBrief';
+import { projectSummary } from '@/utils/projectCategories';
 import Image from 'next/image';
 import DashboardClientSideNav from './DashboardClientSideNav';
 import DashboardTopBar from './DashboardTopBar';
+import ProjectTabs from './ProjectTabs';
 import { useTheme } from '@/context/themeContext';
 
 interface DASHBOARDClientProjectDetailsProps {
@@ -83,36 +85,17 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
     const subtleBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)';
     const subtleBorder = isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.08)';
 
-    // Tab bar
-    const tabBase = "px-[14px] h-[34px] flex items-center rounded-[9px] text-[13px] font-medium whitespace-nowrap transition-all";
-    const activeTabStyle: React.CSSProperties = {
-        background: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
-        color: textColor,
-        boxShadow: isDark ? '0 1px 4px rgba(0,0,0,0.3)' : '0 1px 4px rgba(0,0,0,0.08)',
-    };
-    const inactiveTabStyle: React.CSSProperties = { background: 'transparent', color: mutedColor };
-    const disabledTabStyle: React.CSSProperties = { background: 'transparent', color: mutedColor, opacity: 0.35, cursor: 'not-allowed' };
-    const tabBarStyle: React.CSSProperties = {
-        background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
-        border: isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(0,0,0,0.07)',
-        borderRadius: '13px', padding: '3px',
-        display: 'inline-flex', alignItems: 'center', gap: '2px',
-    };
-
-    if (loading) return (
+    // Loading and error states keep the top bar so the page does not jump when they resolve.
+    if (loading || error) return (
         <div className="flex flex-col xl:flex-row h-screen DashboardBackgroundGradient overflow-hidden">
             <DashboardClientSideNav highlight="projects" />
-            <div className="flex-1 flex items-center justify-center pt-[60px] xl:pt-0">
-                <p className="opacity-40 font-light text-[14px]">Loading project...</p>
-            </div>
-        </div>
-    );
-
-    if (error) return (
-        <div className="flex flex-col xl:flex-row h-screen DashboardBackgroundGradient overflow-hidden">
-            <DashboardClientSideNav highlight="projects" />
-            <div className="flex-1 flex items-center justify-center pt-[60px] xl:pt-0">
-                <p className="opacity-40 font-light text-[14px]">{error}</p>
+            <div className="flex-1 flex flex-col pt-[60px] xl:pt-0 min-h-0 overflow-hidden">
+                <DashboardTopBar title="Overview" />
+                <div className="flex-1 flex items-center justify-center px-[20px]">
+                    {loading
+                        ? <p className="opacity-40 font-light text-[14px]">Loading project...</p>
+                        : <p role="alert" className="text-red-400 text-[14px] text-center">{error}</p>}
+                </div>
             </div>
         </div>
     );
@@ -149,22 +132,11 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
             <DashboardClientSideNav highlight="projects" />
 
             <div className="flex-1 flex flex-col pt-[60px] xl:pt-0 min-h-0 overflow-hidden">
-                <DashboardTopBar title="Project Details" />
+                <DashboardTopBar title="Overview" />
 
                 <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">
 
-                    {/* Tab Nav */}
-                    <div className="mb-[28px]">
-                        <div style={tabBarStyle}>
-                            <Link href={`/dashboard/projects/${projectId}?projectId=${projectId}&userId=${userId}`}
-                                className={tabBase} style={activeTabStyle}>Overview</Link>
-                            <Link href={`/dashboard/projects/${projectId}/progress?projectId=${projectId}&userId=${userId}`}
-                                className={tabBase} style={inactiveTabStyle}>Progress</Link>
-                            <Link href={`/dashboard/projects/${projectId}/uploads?projectId=${projectId}&userId=${userId}`}
-                                className={tabBase} style={inactiveTabStyle}>Uploads</Link>
-
-                        </div>
-                    </div>
+                    <ProjectTabs projectId={projectId} active="overview" />
 
                     {projectDetails && <ProjectBrief project={projectDetails} />}
                     {/* Main Grid */}
@@ -178,7 +150,7 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
                                 <div className="flex items-start justify-between gap-[16px]">
                                     <div className="min-w-0">
                                         <h1 className="text-[22px] font-semibold leading-snug">{projectName}</h1>
-                                        <p className="text-[13px] mt-[6px] leading-relaxed" style={{ color: mutedColor }}>{projectDescription}</p>
+                                        <p className="text-[13px] mt-[6px] leading-relaxed" style={{ color: mutedColor }}>{projectSummary(projectDetails || {})}</p>
                                     </div>
                                     <div className="w-[44px] h-[44px] flex-shrink-0">
                                         {logoSrc
@@ -231,7 +203,7 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
 
                                 {/* Quick links */}
                                 <div className="flex gap-[10px]">
-                                    <Link href={`/dashboard/projects/${projectId}/progress?projectId=${projectId}&userId=${userId}`}
+                                    <Link href={`/dashboard/projects/${projectId}/progress`}
                                         className="flex-1 flex items-center justify-between px-[16px] py-[13px] rounded-[12px] transition-all hover:opacity-80 active:scale-[0.98]"
                                         style={{ background: subtleBg, border: subtleBorder }}>
                                         <div className="flex items-center gap-[8px]">
@@ -240,7 +212,7 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
                                         </div>
                                         <span className="text-[12px]" style={{ color: mutedColor }}>→</span>
                                     </Link>
-                                    <Link href={`/dashboard/projects/${projectId}/uploads?projectId=${projectId}&userId=${userId}`}
+                                    <Link href={`/dashboard/projects/${projectId}/uploads`}
                                         className="flex-1 flex items-center justify-between px-[16px] py-[13px] rounded-[12px] transition-all hover:opacity-80 active:scale-[0.98]"
                                         style={{ background: subtleBg, border: subtleBorder }}>
                                         <div className="flex items-center gap-[8px]">
