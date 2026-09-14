@@ -54,7 +54,7 @@ test('live support messages deliver admin and client alerts, clear visible chat 
  await put(`users/${client.uid}`, {denyWrites:true});
  await page.getByPlaceholder('Write a message...').fill('Keep this draft');
  await page.getByRole('button',{name:'Send message'}).click();
- await expect(page.locator('.DashboardNotice[role="alert"]')).toContainText('wasn’t sent');
+ await expect(page.getByRole('alert').filter({hasText:'wasn’t sent'})).toBeVisible();
  await expect(page.getByPlaceholder('Write a message...')).toHaveValue('Keep this draft');
  await put(`users/${client.uid}`, {denyWrites:false});
  await page.getByRole('button',{name:'Send message'}).click();
@@ -240,14 +240,14 @@ test('profile validation and deletion requests preserve the account and report f
 });
 
 test('direct conversations appear live for both participants and reopen without resetting messages', async ({page,browser}) => {
- const a=await user(undefined,'Alex'), b=await user(undefined,'Robin');
+ const recipient=`Robin${Date.now()}`;
+ const a=await user(undefined,'Alex'), b=await user(undefined,recipient);
  const context=await browser.newContext(); const other=await context.newPage();
  await login(page,a.email); await login(other,b.email); await other.goto('/dashboard/messages'); await page.goto('/dashboard/messages');
  await page.getByRole('button',{name:/New/}).click();
  const modal=page.getByRole('dialog',{name:'New message'});
- await modal.getByLabel('Recipient email').fill(b.email);
- await modal.getByRole('button',{name:'Search',exact:true}).click();
- await modal.getByRole('button',{name:/Start Conversation/}).click();
+ await modal.getByLabel('Name',{exact:true}).fill(recipient);
+ await modal.getByRole('button',{name:`Message ${recipient} Lee`,exact:true}).click();
  await expect(modal).toHaveCount(0);
  await expect(other.getByText('Alex Lee',{exact:true}).first()).toBeVisible();
  const text=`Direct hello ${unique()}`;
@@ -257,8 +257,8 @@ test('direct conversations appear live for both participants and reopen without 
  const inbox=await bell(other); await inbox.getByRole('button').filter({hasText:text}).click();
  await expect(other.getByText(text,{exact:true}).last()).toBeVisible();
  await page.getByRole('button',{name:/New/}).click();
- await modal.getByLabel('Recipient email').fill(b.email); await modal.getByRole('button',{name:'Search',exact:true}).click();
- await modal.getByRole('button',{name:/Open Conversation/}).click();
+ await modal.getByLabel('Name',{exact:true}).fill(recipient);
+ await modal.getByRole('button',{name:`Message ${recipient} Lee`,exact:true}).click();
  expect((await get(`directMessages/${id}`)).lastMessage.stringValue).toBe(text);
  expect(await list(`directMessages/${id}/messages`)).toHaveLength(1);
  await context.close();

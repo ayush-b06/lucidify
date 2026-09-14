@@ -1,8 +1,9 @@
 "use client";
+import { queueDirectoryProfile } from '@/utils/memberDirectory';
 
 import { useEffect, useState } from 'react';
 import { getAuth, signOut } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
 import DashboardClientSideNav from './DashboardClientSideNav';
 import Image from 'next/image';
@@ -48,6 +49,7 @@ const Field = ({
             ) : (
                 <input id={field}
                     type="text"
+                    maxLength={field === 'firstName' || field === 'lastName' ? 80 : undefined}
                     value={draft?.[field] as string ?? ''}
                     onChange={e => onChange(field, e.target.value)}
                     className="bg-white/5 border border-white/10 rounded-[10px] px-[14px] py-[10px] text-[14px] font-light focus:outline-none focus:ring-1 focus:ring-[#725CF7] placeholder:opacity-30"
@@ -116,12 +118,14 @@ const DASHBOARDClientProfile = () => {
 
     const saveChanges = async () => {
         if (!draft || saving) return;
+        if (draft.firstName.trim().length > 80 || draft.lastName.length > 80) { setError('Keep each name under 81 characters.'); return; }
         if (!draft.firstName.trim()) { setError('Enter your first name before saving.'); return; }
         const user = auth.currentUser;
         if (!user) return;
         setSaving(true); setError('');
         try {
-            await updateDoc(doc(db, 'users', user.uid), {
+            const batch = writeBatch(db);
+            batch.update(doc(db, 'users', user.uid), {
                 firstName: draft.firstName.trim(),
                 lastName: draft.lastName,
                 phoneNumber: draft.phoneNumber,
@@ -131,7 +135,9 @@ const DASHBOARDClientProfile = () => {
                 companyRole: draft.companyRole,
                 bio: draft.bio,
             });
-            setProfile(draft);
+            queueDirectoryProfile(batch, user.uid, { ...draft, firstName: draft.firstName.trim() });
+            await batch.commit();
+            setProfile({ ...draft, firstName: draft.firstName.trim() });
             setIsEditing(false);
             setDraft(null);
             setSavedMsg(true);
@@ -145,7 +151,10 @@ const DASHBOARDClientProfile = () => {
         if (!user || saving) return;
         setSaving(true); setError('');
         try {
-            await updateDoc(doc(db, 'users', user.uid), { selectedAvatar: av });
+            const batch = writeBatch(db);
+            batch.update(doc(db, 'users', user.uid), { selectedAvatar: av });
+            queueDirectoryProfile(batch, user.uid, { ...profile, selectedAvatar: av });
+            await batch.commit();
             setProfile(prev => ({ ...prev, selectedAvatar: av }));
             if (draft) setDraft(prev => prev ? { ...prev, selectedAvatar: av } : prev);
             setIsAvatarOpen(false);

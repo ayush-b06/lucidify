@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/authContext";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
+import { ensureDirectoryProfile } from "@/utils/memberDirectory";
+import { ADMIN_EMAIL } from "@/utils/notifications";
 
 export default function DashboardGuard({ children }: { children: React.ReactNode }) {
     const { user, loading } = useAuth();
@@ -29,6 +31,7 @@ export default function DashboardGuard({ children }: { children: React.ReactNode
                 router.replace("/signup/get-started");
             } else {
                 setCheckedUid(user.uid);
+                if (user.email !== ADMIN_EMAIL) void ensureDirectoryProfile(user.uid, snapshot.data() || {}).catch(() => console.error("Could not update the member directory."));
             }
         }).catch(() => {
             if (!cancelled) setError(true);

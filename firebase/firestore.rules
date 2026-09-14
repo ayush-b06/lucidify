@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function admin() { return signedIn() && request.auth.token.email == 'ayush.bhujle@gmail.com'; }
+    function owner(uid) { return signedIn() && request.auth.uid == uid; }
+    function participant(id) { return signedIn() && request.auth.uid in get(/databases/$(database)/documents/directMessages/$(id)).data.participants; }
+    function validMessage() {
+      return request.resource.data.keys().hasOnly(['text', 'attachments', 'sender', 'timestamp', 'isRead'])
+        && request.resource.data.text is string && request.resource.data.text.size() <= 10000
+        && request.resource.data.get('attachments', []) is list && request.resource.data.get('attachments', []).size() <= 5
+        && (request.resource.data.text.size() > 0 || request.resource.data.get('attachments', []).size() > 0)
+        && request.resource.data.timestamp is timestamp;
+    }
+    match /users/{uid} {
+      allow get: if owner(uid) || admin();
+      allow list: if admin();
+      allow create, update: if owner(uid) || admin();
+      allow delete: if admin();
+      match /projects/{projectId}/{document=**} { allow read, write: if owner(uid) || admin(); }
+      match /conversations/{conversationId} {
+        allow read, create, update: if owner(uid) || admin();
+        allow delete: if admin();
+        match /messages/{messageId} {
+          allow read: if owner(uid) || admin();
+          allow create: if validMessage() && ((admin() && request.resource.data.sender == 'Lucidify')
+            || (owner(uid) && request.resource.data.sender == request.auth.uid)
+            || (owner(uid) && conversationId == 'lucidify' && messageId == 'welcome'
+              && request.resource.data.sender == 'Lucidify'
+              && request.resource.data.text == "Welcome to Lucidify! We're excited to help you get started with your project."
+              && request.resource.data.get('attachments', []).size() == 0));
+        }
+      }
+      match /dmConversations/{id} {
+        allow read: if owner(uid);
+        allow create, update: if signedIn() && request.auth.uid in getAfter(/databases/$(database)/documents/directMessages/$(id)).data.participants
+          && uid in getAfter(/databases/$(database)/documents/directMessages/$(id)).data.participants
+          && request.resource.data.otherUserId in getAfter(/databases/$(database)/documents/directMessages/$(id)).data.participants
+          && request.resource.data.otherUserId != uid;
+      }
+      match /notifications/{id} {
+        allow read: if owner(uid) || admin();
+        allow update: if (owner(uid) || admin()) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow create: if admin() || (signedIn() && request.resource.data.senderId == request.auth.uid
+          && participant(request.resource.data.conversationId)
+          && uid in get(/databases/$(database)/documents/directMessages/$(request.resource.data.conversationId)).data.participants);
+      }
+      match /adminNotifications/{id} {
+        allow read: if owner(uid) || admin();
+        allow create: if owner(uid) && request.resource.data.actorId == uid;
+        allow update: if admin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      }
+    }
+    match /userDirectory/{uid} {
+      function validDirectory() {
+        let profile = getAfter(/databases/$(database)/documents/users/$(uid)).data;
+        return request.resource.data.keys().hasOnly(['firstName', 'lastName', 'selectedAvatar', 'searchPrefixes'])
+          && request.resource.data.firstName is string && request.resource.data.firstName.size() <= 80
+          && request.resource.data.lastName is string && request.resource.data.lastName.size() <= 80
+          && request.resource.data.firstName == profile.firstName
+          && request.resource.data.lastName == profile.get('lastName', '')
+          && request.resource.data.selectedAvatar == profile.get('selectedAvatar', null)
+          && request.resource.data.searchPrefixes is list && request.resource.data.searchPrefixes.size() <= 240;
+      }
+      allow get: if signedIn();
+      allow list: if signedIn() && request.query.limit <= 20;
+      allow create, update: if owner(uid) && validDirectory();
+      allow delete: if owner(uid) || admin();
+    }
+    match /directMessages/{id} {
+      function validProfile(uid) {
+        let source = get(/databases/$(database)/documents/userDirectory/$(uid)).data;
+        let profile = request.resource.data.participantProfiles[uid];
+        return profile.keys().hasOnly(['firstName', 'lastName', 'selectedAvatar'])
+          && profile.firstName == source.firstName && profile.lastName == source.lastName && profile.selectedAvatar == source.selectedAvatar;
+      }
+      allow get: if signedIn() && (!exists(/databases/$(database)/documents/directMessages/$(id)) || request.auth.uid in resource.data.participants);
+      allow list: if signedIn() && request.auth.uid in resource.data.participants;
+      allow create: if signedIn() && request.resource.data.participants is list && request.resource.data.participants.size() == 2
+        && request.resource.data.participants[0] != request.resource.data.participants[1]
+        && request.auth.uid in request.resource.data.participants
+        && (id == request.resource.data.participants[0] + '_' + request.resource.data.participants[1] || id == request.resource.data.participants[1] + '_' + request.resource.data.participants[0])
+        && request.resource.data.participantProfiles.keys().hasOnly(request.resource.data.participants)
+        && validProfile(request.resource.data.participants[0]) && validProfile(request.resource.data.participants[1]);
+      allow update: if participant(id) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastMessageSender', 'timestamp', 'unreadCounts']);
+      match /messages/{messageId} {
+        allow read: if participant(id);
+        allow create: if participant(id) && validMessage() && request.resource.data.sender == request.auth.uid;
+      }
+    }
+    match /contacts/{id} {
+      allow create: if request.resource.data.size() <= 12 && request.resource.data.email is string && request.resource.data.email.size() <= 320;
+      allow read, update, delete: if admin();
+    }
+    match /{collectionName}/{id} {
+      allow create: if collectionName == 'project ideas' && request.resource.data.size() <= 12 && request.resource.data.email is string && request.resource.data.email.size() <= 320;
+      allow read, update, delete: if collectionName == 'project ideas' && admin();
+    }
+  }
+}

@@ -7,6 +7,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
 import styles from './Onboarding.module.css';
+import { queueDirectoryProfile } from '@/utils/memberDirectory';
+import { ADMIN_EMAIL } from '@/utils/notifications';
 
 const avatars = Array.from({ length: 24 }, (_, index) => `Avatar ${index + 1}.png`);
 
@@ -69,6 +71,7 @@ export default function AccountSetup() {
             batch.set(doc(userRef, 'conversations', 'lucidify', 'messages', 'welcome'), {
                 text: welcome, sender: 'Lucidify', timestamp, isRead: false,
             });
+            if (user.email !== ADMIN_EMAIL) queueDirectoryProfile(batch, user.uid, { ...snapshot.data(), firstName: name.trim(), selectedAvatar });
             await batch.commit();
             router.replace('/dashboard');
         } catch {

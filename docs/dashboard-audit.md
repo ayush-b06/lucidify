@@ -69,7 +69,7 @@ The embedded dashboard preview explicitly overrides the shared dashboard minimum
 
 ## Service configuration to verify before publishing
 
-No production Firebase rules are checked into this repository. The emulator rules are test fixtures and must not be deployed. Before publishing, confirm the deployed rules permit the intended paths while enforcing ownership and admin privileges:
+Production rules are checked into `firebase/firestore.rules` and configured in the root `firebase.json`. The emulator rules in `tests/firestore.rules` are fault-injection fixtures and must not be deployed. Before publishing, confirm the deployed rules permit the intended paths while enforcing ownership and admin privileges:
 
 - Clients create their own `users/{uid}/adminNotifications` events; only the team acknowledges those events.
 - Admins write project updates and client notifications together.
@@ -77,3 +77,18 @@ No production Firebase rules are checked into this repository. The emulator rule
 - Profile updates permit the deletion-request timestamp. Deletion requests require a person or trusted backend to complete account and data removal; the UI does not claim immediate deletion.
 
 Real Google OAuth authorization, the Cloudinary upload preset, and deployed rule enforcement still need a deployment-environment check. This pass implements in-app notifications; it does not add email or push delivery or a payment processor.
+
+
+## Messaging follow-up
+
+Both chat views share a composer with file picking, drag-and-drop staging, image previews, upload progress/cancellation, multiline text, and separate drafts per conversation. Files wait for Send; up to five files of 10 MB each are accepted. Sending is transactional and uses a stable message ID to avoid duplicate messages, unread increments, or notifications after retry. Failed uploads and sends retain drafts and reuse completed uploads. Reading older messages no longer jumps to the bottom when a new message arrives. Conversation rows are keyboard accessible, and unread-status errors have a working retry.
+
+Attachments reuse the existing Cloudinary account (`dldxkfbz4`, `Unsigned Presets`). Safe raster images use image uploads; documents and other files use raw uploads. Downloads validate the Cloudinary origin, preserve filenames, and offer retry. No Firebase Storage bucket, new paid service, or billing change is needed. As with existing project uploads, anyone with the asset URL can download it; the composer discloses this before sending. Removing a staged file removes it from the draft. Assets uploaded before a failed message commit can remain in Cloudinary if that draft is abandoned; the unsigned preset does not return deletion tokens.
+
+Live synthetic checks confirmed text-file upload and download. The owner enabled Cloudinary’s “Allow delivery of PDF and ZIP files” setting. Reverification confirmed the previously blocked PDF now downloads with HTTP 200 and a valid PDF header. A new ZIP uploaded and downloaded with HTTP 200, and its downloaded bytes exactly matched the original archive. No storage configuration blocker remains. A blocked PDF/ZIP download still explains the issue and offers retry if the setting changes later. Three small synthetic assets are in the `lucidify-integration-tests` Cloudinary folder. Browser tests intercept Cloudinary responses to cover success, failure, and recovery without uploading customer data.
+
+New-message search queries a minimal `userDirectory` projection by name prefix as someone types. It supports case and accent normalization and distinct users sharing a name, excludes emails, and updates existing conversation names and avatars live. Account setup and profile edits maintain directory entries. A one-time migration created projections for all 14 existing set-up non-admin accounts. `scripts/sync-member-directory.cjs` defaults to a read-only eligibility count; `--apply` creates only missing entries, preserving existing directory records. It uses the authenticated Firebase CLI and never prints user data or credentials.
+
+The previous production Firestore rules granted anonymous read/write access with a future expiry. The replacement rules in `firebase/firestore.rules` restrict private profiles and conversations, allow authenticated minimal name search, and prevent forged senders. Emulator checks cover legitimate direct/support messaging and denied outsider reads/forged sends. Deploy the new application code and production rules together: the old email-based search is incompatible with the new privacy rules. Never deploy `tests/firestore.rules`, which intentionally includes fault-injection controls. The directory migration and three synthetic Cloudinary uploads were verified against live services. Deploy only the root production rules configuration (`firebase deploy --project lucidify-playground --only firestore:rules`).
+
+Validation: 33 browser tests passed across the regression and focused runs, including all seven messaging checks and all three progress checks. The first broad run was interrupted after 29 passing tests when the storage choice changed; the remaining progress checks and revised Cloudinary checks passed subsequently. The final production build passes with no lint errors (existing image optimization advisories remain). Screenshots: `artifacts/name-search.png` and `artifacts/chat-attachments-mobile.png`.

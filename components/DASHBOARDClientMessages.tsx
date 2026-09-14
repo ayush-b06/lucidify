@@ -2,15 +2,18 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import ChatComposer from './ChatComposer';
+import ChatMessageContent from './ChatMessageContent';
+import { ChatTarget, chatKey } from '@/utils/chatAttachments';
+import { useMessageScroll } from '@/hooks/useMessageScroll';
 import { useChatVisible } from '@/hooks/useChatVisible';
-import { subscribeClientConversations, sendChatMessage } from '@/utils/conversations';
+import { subscribeClientConversations } from '@/utils/conversations';
 import { getAuth } from 'firebase/auth';
 import {
-    addDoc, collection, doc, getDoc, getDocs, increment,
+    collection, doc, getDoc,
     onSnapshot, orderBy, query, Timestamp, updateDoc
 } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
-import { writeAdminNotification } from '../utils/notifications';
 import DashboardClientSideNav from './DashboardClientSideNav';
 import Image from 'next/image';
 import AddDirectMessageModal from './AddDirectMessageModal';
@@ -21,6 +24,7 @@ interface Message {
     text: string;
     sender: string;
     timestamp: Timestamp;
+    attachments?: unknown;
 }
 
 // Unified conversation entry for sidebar
@@ -47,16 +51,14 @@ const DASHBOARDClientMessages = () => {
     const [convos, setConvos] = useState<ConvoItem[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [newMessage, setNewMessage] = useState('');
     const [myAvatar, setMyAvatar] = useState<string | null>(null);
     const [myFirstName, setMyFirstName] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState('');
     const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
     const [isDMModalOpen, setIsDMModalOpen] = useState(false);
-    const [isSending, setIsSending] = useState(false);
     const chatVisible = useChatVisible(mobileView);
 
-    const messagesEndRef = useRef<HTMLDivElement | null>(null);
+    const dropTarget = useRef<HTMLDivElement>(null);
 
     // ── Fetch my profile ──────────────────────────────────────────────────────
     useEffect(() => {
@@ -69,10 +71,6 @@ const DASHBOARDClientMessages = () => {
                     const data = snap.data();
                     setMyAvatar(data.selectedAvatar || null);
                     setMyFirstName(data.firstName || '');
-                    // Ensure email is saved to Firestore (needed for DM search)
-                    if (!data.email && user.email) {
-                        await updateDoc(doc(db, 'users', user.uid), { email: user.email });
-                    }
                 }
             } catch (e) { console.error(e); }
         };
@@ -103,7 +101,7 @@ const DASHBOARDClientMessages = () => {
         if (!user || !selectedId || !selectedType || !selectedUnread || !chatVisible) return;
         const ref = selectedType === 'lucidify' ? doc(db, 'users', user.uid, 'conversations', selectedId) : doc(db, 'directMessages', selectedId);
         void updateDoc(ref, { [`unreadCounts.${user.uid}`]: 0 }).catch(() => setChatError(current => current || 'Couldn’t mark this conversation as read.'));
-    }, [selectedId, selectedType, selectedUnread, chatVisible]);
+    }, [selectedId, selectedType, selectedUnread, chatVisible, loadAttempt]);
 
     useEffect(() => {
         setMessages([]);
@@ -113,25 +111,6 @@ const DASHBOARDClientMessages = () => {
         return onSnapshot(query(ref, orderBy('timestamp', 'asc')), snap => setMessages(snap.docs.map(d => ({ ...d.data(), id: d.id } as Message))), () => setChatError('Couldn’t load messages. Please retry.'));
     }, [selectedId, selectedType, loadAttempt]);
 
-    // ── Auto-scroll to latest message ─────────────────────────────────────────
-    useEffect(() => {
-        if (messagesEndRef.current) {
-            messagesEndRef.current.scrollTop = messagesEndRef.current.scrollHeight;
-        }
-    }, [messages]);
-
-    const sendMessage = async () => {
-        const text = newMessage.trim();
-        const user = auth.currentUser;
-        const convo = convos.find(c => c.id === selectedId);
-        if (!text || !user || !convo || isSending) return;
-        setIsSending(true); setChatError('');
-        try {
-            await sendChatMessage({ conversationId: convo.id, text, type: convo.type, ownerId: user.uid, otherUserId: convo.otherUserId, senderName: myFirstName });
-            setNewMessage(current => current === text || current.trim() === text ? '' : current);
-        } catch { setChatError('Message wasn’t sent. Your draft is still here — try again.'); }
-        finally { setIsSending(false); }
-    };
     const handleDMCreated = (convoId: string) => { setSelectedId(convoId); setMobileView('chat'); };
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -151,7 +130,7 @@ const DASHBOARDClientMessages = () => {
     };
 
     const formatTimestamp = (ts: Timestamp | null) => {
-        if (!ts) return '';
+        if (!ts || typeof ts.toDate !== 'function') return '';
         const d = ts.toDate();
         const now = new Date();
         const isToday = d.toDateString() === now.toDateString();
@@ -161,6 +140,8 @@ const DASHBOARDClientMessages = () => {
     };
 
     const selectedConvo = convos.find(c => c.id === selectedId) || null;
+    const target: ChatTarget | null = selectedConvo && auth.currentUser ? { conversationId: selectedConvo.id, type: selectedConvo.type, ownerId: auth.currentUser.uid, otherUserId: selectedConvo.otherUserId, senderName: myFirstName } : null;
+    const scroll = useMessageScroll(messages, target ? chatKey(target) : '', auth.currentUser?.uid || '');
     const groupedMessages = chunkBySender(messages);
     const filteredConvos = convos.filter(c =>
         c.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -171,6 +152,8 @@ const DASHBOARDClientMessages = () => {
     const ConvoRow = ({ convo }: { convo: ConvoItem }) => (
         <div
             className={`px-[30px] lg:px-[50px] py-[18px] lg:py-[22px] border-t-[0.5px] border-solid border-white ${selectedId === convo.id ? 'MessagesHighlightGradient border-opacity-50' : 'border-opacity-10'} text-white cursor-pointer flex gap-[15px] hover:bg-white/[0.02]`}
+            role="button" tabIndex={0} aria-label={`Open chat with ${convo.title}`}
+            onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handleChatSelect(convo); } }}
             onClick={() => handleChatSelect(convo)}
         >
             {/* Avatar */}
@@ -286,7 +269,7 @@ const DASHBOARDClientMessages = () => {
                             </div>
 
                             {/* ── Right: Chat Panel ── */}
-                            <div className={`flex-1 bg-gradient-to-br from-[#101010] to-[#1A1A1A] rounded-[35px] sm:rounded-l-none sm:rounded-r-[35px] flex flex-col LeftGradientBorder min-h-0 overflow-hidden ${mobileView === 'list' ? 'hidden sm:flex' : 'flex'}`}>
+                            <div ref={dropTarget} aria-label="Chat" className={`flex-1 bg-gradient-to-br from-[#101010] to-[#1A1A1A] rounded-[35px] sm:rounded-l-none sm:rounded-r-[35px] flex flex-col LeftGradientBorder min-h-0 overflow-hidden ${mobileView === 'list' ? 'hidden sm:flex' : 'flex'}`}>
 
                                 {/* Chat header */}
                                 <div className="BlackWithLightGradient rounded-t-[35px] sm:rounded-tl-none sm:rounded-tr-[35px] px-[20px] sm:px-[40px] py-[18px] flex justify-between border-b-[0.5px] border-solid border-white border-opacity-10 flex-shrink-0 items-center gap-[12px]">
@@ -319,27 +302,10 @@ const DASHBOARDClientMessages = () => {
                                         </div>
                                     </div>
 
-                                    <div className="hidden sm:flex gap-[10px] items-center flex-shrink-0">
-                                        <div className="rounded-[8px] BlackGradient ContentCardShadow flex justify-center items-center hover:cursor-pointer hover:opacity-70 w-[36px] h-[36px]">
-                                            <div className="w-[18px]">
-                                                <Image src="/Phone Call Icon.png" alt="Call" width={64} height={64} style={{ width: "100%", height: "auto" }} />
-                                            </div>
-                                        </div>
-                                        <div className="rounded-[8px] BlackGradient ContentCardShadow flex justify-center items-center hover:cursor-pointer hover:opacity-70 w-[36px] h-[36px]">
-                                            <div className="w-[18px]">
-                                                <Image src="/Video Call Icon.png" alt="Video" width={64} height={64} style={{ width: "100%", height: "auto" }} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col gap-[4px] hover:cursor-pointer hover:opacity-50 flex-shrink-0">
-                                        <div className="bg-white rounded-full w-[4px] h-[4px]" />
-                                        <div className="bg-white rounded-full w-[4px] h-[4px]" />
-                                        <div className="bg-white rounded-full w-[4px] h-[4px]" />
-                                    </div>
                                 </div>
 
                                 {/* Messages */}
-                                <div ref={messagesEndRef} className="flex flex-col overflow-y-auto gap-[10px] flex-1 min-h-0 px-[20px] sm:px-[40px] py-[20px]">
+                                <div ref={scroll.ref} onScroll={scroll.onScroll} className="flex flex-col overflow-y-auto gap-[10px] flex-1 min-h-0 px-[20px] sm:px-[40px] py-[20px]">
                                     {groupedMessages.length === 0 && (
                                         <div className="flex flex-col items-center justify-center h-full gap-[10px] opacity-30">
                                             <span className="text-[36px]">💬</span>
@@ -384,7 +350,7 @@ const DASHBOARDClientMessages = () => {
                                                                         : 'MessagesHighlightGradient ContentCardShadow rounded-b-[15px] rounded-tr-[15px]'
                                                                 }`}
                                                             >
-                                                                {msg.text}
+                                                                <ChatMessageContent text={msg.text} attachments={msg.attachments} target={target!} />
                                                             </div>
                                                         ))}
                                                         <p className="text-[11px] opacity-25 px-[4px]">{formatTimestamp(group[group.length - 1].timestamp)}</p>
@@ -395,24 +361,7 @@ const DASHBOARDClientMessages = () => {
                                     })}
                                 </div>
 
-                                {/* Input */}
-                                <div className="BlackGradient ContentCardShadow rounded-b-[35px] sm:rounded-bl-none sm:rounded-br-[35px] px-[20px] sm:px-[40px] py-[16px] flex-shrink-0">
-                                    <div className="BlackWithLightGradient ContentCardShadow rounded-[12px] flex gap-[15px] px-[16px] sm:px-[22px] py-[12px] items-center">
-                                        <input
-                                            type="text"
-                                            value={newMessage}
-                                            onChange={e => setNewMessage(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && !e.nativeEvent.isComposing && !e.shiftKey && sendMessage()}
-                                            placeholder="Write a message..."
-                                            className="w-full focus:outline-none text-[14px] sm:text-[15px] font-light bg-transparent placeholder:opacity-30"
-                                        />
-                                        <div className="flex gap-[12px] items-center flex-shrink-0">
-                                            <button onClick={sendMessage} aria-label="Send message" disabled={isSending || !newMessage.trim()} className="w-[22px] sm:w-[25px] hover:opacity-70 disabled:opacity-30">
-                                                <Image src="/Send Icon.png" alt="Send" width={64} height={64} style={{ width: "100%", height: "auto" }} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
+                                <ChatComposer target={target} dropTarget={dropTarget} onSent={scroll.onSent} />
                             </div>
 
                         </div>

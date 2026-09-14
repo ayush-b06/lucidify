@@ -2,24 +2,22 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import ChatComposer from './ChatComposer';
+import ChatMessageContent from './ChatMessageContent';
+import { ChatTarget, chatKey } from '@/utils/chatAttachments';
+import { useMessageScroll } from '@/hooks/useMessageScroll';
 import { useChatVisible } from '@/hooks/useChatVisible';
-import { subscribeAdminConversations, sendChatMessage } from '@/utils/conversations';
-import { getAuth } from 'firebase/auth';
+import { subscribeAdminConversations } from '@/utils/conversations';
 import {
-    addDoc,
     collection,
-    getDocs,
     onSnapshot,
     orderBy,
     query,
     Timestamp,
     doc,
-    DocumentData,
-    QuerySnapshot,
     updateDoc
 } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
-import { writeNotification } from '../utils/notifications';
 import Image from 'next/image';
 import DashboardAdminSideNav from './DashboardAdminSideNav';
 import DashboardTopBar from './DashboardTopBar';
@@ -47,6 +45,7 @@ interface Message {
     text: string;
     sender: string;
     timestamp: Timestamp;
+    attachments?: unknown;
 }
 
 interface SelectedChat {
@@ -57,11 +56,9 @@ const DASHBOARDAdminMessages: React.FC = () => {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
     const [selectedChat, setSelectedChat] = useState<Conversation | null>(null);
-    const [newMessage, setNewMessage] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
     const [chatError, setChatError] = useState('');
-    const [isSending, setIsSending] = useState(false);
     const [loadAttempt, setLoadAttempt] = useState(0);
     const chatVisible = useChatVisible(mobileView);
     const params = useSearchParams();
@@ -83,7 +80,7 @@ const DASHBOARDAdminMessages: React.FC = () => {
     useEffect(() => {
         if (!selectedChat || !selectedUnread || !chatVisible) return;
         void updateDoc(doc(db, 'users', selectedChat.userId, 'conversations', selectedChat.id), { 'unreadCounts.Lucidify': 0 }).catch(() => setChatError(current => current || 'Couldn’t mark this conversation as read.'));
-    }, [selectedChat, selectedUnread, chatVisible]);
+    }, [selectedChat, selectedUnread, chatVisible, loadAttempt]);
     const selectedChatId = selectedChat?.id;
     const selectedUserId = selectedChat?.userId;
     useEffect(() => {
@@ -92,19 +89,9 @@ const DASHBOARDAdminMessages: React.FC = () => {
         const ref = collection(db, 'users', selectedUserId!, 'conversations', selectedChatId!, 'messages');
         return onSnapshot(query(ref, orderBy('timestamp','asc')), snap => setMessages(snap.docs.map(d => ({ ...d.data(), id:d.id } as Message))), () => setChatError('Couldn’t load messages. Please retry.'));
     }, [selectedChatId, selectedUserId, loadAttempt]);
-    const sendMessage = async () => {
-        const text = newMessage.trim();
-        if (!text || !selectedChat || isSending) return;
-        setIsSending(true); setChatError('');
-        try {
-            await sendChatMessage({ conversationId: selectedChat.id, ownerId: selectedChat.userId, text, type:'lucidify', admin:true });
-            setNewMessage(current => current.trim() === text ? '' : current);
-        } catch { setChatError('Message wasn’t sent. Your draft is still here — try again.'); }
-        finally { setIsSending(false); }
-    };
 
     const formatTimestamp = (timestamp?: Timestamp | null): string => {
-        if (!timestamp) return ''; // Handle null or undefined
+        if (!timestamp || typeof timestamp.toDate !== 'function') return ''; // Handle null or undefined
         const date = timestamp.toDate();
         return date.toLocaleString(); // Format as desired
     };
@@ -135,16 +122,15 @@ const DASHBOARDAdminMessages: React.FC = () => {
 
     const filteredConversations = conversations.filter(convo =>
         convo.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        `${convo.firstName || ''} ${convo.lastName || ''}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
         convo.companyName?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const messagesEndRef = useRef<HTMLDivElement | null>(null);
+    const dropTarget = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        if (messagesEndRef.current) {
-            messagesEndRef.current.scrollTop = messagesEndRef.current.scrollHeight;
-        }
-    }, [groupedMessages]);
+    const target: ChatTarget | null = selectedChat ? { conversationId: selectedChat.id, ownerId: selectedChat.userId, type: 'lucidify', admin: true } : null;
+    const scroll = useMessageScroll(messages, target ? chatKey(target) : '', 'Lucidify');
+
 
     return (
         <div className="flex flex-col xl:flex-row h-screen DashboardBackgroundGradient overflow-hidden">
@@ -184,6 +170,8 @@ const DASHBOARDAdminMessages: React.FC = () => {
                                                 <div
                                                     key={`${conversation.userId}:${conversation.id}`}
                                                     className={`px-[30px] lg:px-[50px] py-[18px] lg:py-[22px] border-t-[0.5px] border-solid border-white ${selectedChat && selectedChat.id === conversation.id && selectedChat.userId === conversation.userId ? 'MessagesHighlightGradient border-opacity-50' : 'border-opacity-25'} text-white cursor-pointer flex gap-[15px]`}
+                                                    role="button" tabIndex={0} aria-label={`Open chat with ${conversation.firstName || 'Member'} ${conversation.lastName || ''}`}
+                                                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handleChatSelect(conversation); } }}
                                                     onClick={() => handleChatSelect(conversation)}
                                                 >
                                                     <div className="rounded-[5px] BlackGradient ContentCardShadow flex justify-center items-center flex-shrink-0">
@@ -218,7 +206,7 @@ const DASHBOARDAdminMessages: React.FC = () => {
                         </div>
 
                         {/* Right: Chat Messages */}
-                        <div className={`flex-1 bg-gradient-to-br from-[#101010] to-[#1A1A1A] rounded-[35px] sm:rounded-l-none sm:rounded-r-[35px] flex flex-col LeftGradientBorder min-h-0 overflow-hidden ${mobileView === 'list' ? 'hidden sm:flex' : 'flex'}`}>
+                        <div ref={dropTarget} aria-label="Chat" className={`flex-1 bg-gradient-to-br from-[#101010] to-[#1A1A1A] rounded-[35px] sm:rounded-l-none sm:rounded-r-[35px] flex flex-col LeftGradientBorder min-h-0 overflow-hidden ${mobileView === 'list' ? 'hidden sm:flex' : 'flex'}`}>
                             {/* Top part */}
                             <div className="BlackWithLightGradient rounded-t-[35px] sm:rounded-tl-none sm:rounded-tr-[35px] px-[20px] sm:px-[60px] py-[20px] flex justify-between border-b-[0.5px] border-solid border-white border-opacity-20 flex-shrink-0 items-center">
                                 <button
@@ -246,28 +234,11 @@ const DASHBOARDAdminMessages: React.FC = () => {
                                     </div>
                                 </div>
                                 <div className="flex gap-[15px] sm:gap-[30px] items-center flex-shrink-0">
-                                    <div className="hidden sm:flex gap-[15px]">
-                                        <div className="rounded-[5px] BlackGradient ContentCardShadow flex justify-center items-center hover:cursor-pointer hover:scale-95">
-                                            <div className="w-[20px] h-[20px] flex items-center mx-[8px] my-[8px]">
-                                                <Image src="/Phone Call Icon.png" alt="Phone Call Icon" width={64} height={64} style={{ width: "100%", height: "auto" }} />
-                                            </div>
-                                        </div>
-                                        <div className="rounded-[5px] BlackGradient ContentCardShadow flex justify-center items-center hover:cursor-pointer hover:scale-95">
-                                            <div className="w-[20px] h-[20px] flex items-center mx-[8px] my-[8px]">
-                                                <Image src="/Video Call Icon.png" alt="Video Call Icon" width={64} height={64} style={{ width: "100%", height: "auto" }} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col gap-[4px] hover:cursor-pointer hover:opacity-50">
-                                        <div className="bg-white rounded-full w-[4px] h-[4px]" />
-                                        <div className="bg-white rounded-full w-[4px] h-[4px]" />
-                                        <div className="bg-white rounded-full w-[4px] h-[4px]" />
-                                    </div>
                                 </div>
                             </div>
 
                             {/* Middle part - scrollable */}
-                            <div ref={messagesEndRef} className="flex flex-col overflow-y-auto gap-[15px] flex-1 min-h-0">
+                            <div ref={scroll.ref} onScroll={scroll.onScroll} className="flex flex-col overflow-y-auto gap-[15px] flex-1 min-h-0">
                                 {groupedMessages.map((group, index) => (
                                     <div key={index} className={`flex mx-[20px] sm:mx-[60px] my-[15px] sm:my-[30px] ${group[0].sender === 'Lucidify' ? "justify-end" : "justify-start"}`}>
                                         <div className="max-w-[85%] sm:max-w-[80%]">
@@ -275,14 +246,14 @@ const DASHBOARDAdminMessages: React.FC = () => {
                                                 <div className="inline-flex gap-[10px] sm:gap-[15px]">
                                                     <div className="flex flex-col gap-[10px] items-end">
                                                         <div className="flex items-center gap-[10px]">
-                                                            <h3 className="opacity-80 font-light text-[14px]">Moopy</h3>
+                                                            <h3 className="opacity-80 font-light text-[14px]">Lucidify</h3>
                                                             <h3 className="font-semibold text-[16px]">You</h3>
                                                         </div>
                                                         <div className="flex flex-col gap-[10px] items-end">
                                                             {group.map((message) => (
                                                                 <div key={message.id} className="inline flex-col gap-[50px]">
                                                                     <div className={`inline-flex text-[14px] font-light rounded-b-[15px] rounded-tl-[15px] px-[15px] py-[10px] ${message.sender === 'Lucidify' ? 'PopupAttentionGradient PopupAttentionShadow' : 'MessagesHighlightGradient ContentCardShadow'}`}>
-                                                                        {message.text}
+                                                                        <ChatMessageContent text={message.text} attachments={message.attachments} target={target!} />
                                                                     </div>
                                                                 </div>
                                                             ))}
@@ -310,7 +281,7 @@ const DASHBOARDAdminMessages: React.FC = () => {
                                                             {group.map((message) => (
                                                                 <div key={message.id} className="inline flex-col gap-[50px]">
                                                                     <div className={`inline-flex text-[14px] font-light rounded-b-[15px] rounded-tr-[15px] px-[15px] py-[10px] ${message.sender === 'Lucidify' ? 'PopupAttentionGradient PopupAttentionShadow' : 'MessagesHighlightGradient ContentCardShadow'}`}>
-                                                                        {message.text}
+                                                                        <ChatMessageContent text={message.text} attachments={message.attachments} target={target!} />
                                                                     </div>
                                                                 </div>
                                                             ))}
@@ -323,35 +294,7 @@ const DASHBOARDAdminMessages: React.FC = () => {
                                 ))}
                             </div>
 
-                            {/* Bottom part */}
-                            <div className="BlackGradient ContentCardShadow rounded-b-[35px] sm:rounded-bl-none sm:rounded-br-[35px] px-[20px] sm:px-[50px] py-[17px] flex gap-[25px] flex-shrink-0">
-                                <div className="BlackWithLightGradient ContentCardShadow rounded-[10px] flex gap-[25px] px-[15px] sm:px-[25px] py-[13px] w-full">
-                                    <input
-                                        type="text"
-                                        value={newMessage}
-                                        disabled={!selectedChat || isSending}
-                                        onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); void sendMessage(); } }}
-                                        onChange={(e) => setNewMessage(e.target.value)}
-                                        placeholder="Write a Message..."
-                                        className="w-full focus:outline-none text-[16px] font-light bg-transparent"
-                                    />
-                                    <div className="flex gap-[25px] items-center">
-                                        <div className="hidden sm:flex gap-[15px]">
-                                            <div className="w-[20px] opacity-60 hover:opacity-100 hover:cursor-pointer">
-                                                <Image src="/Attachment Icon.png" alt="Send Icon" width={64} height={64} style={{ width: "100%", height: "auto" }} />
-                                            </div>
-                                            <div className="w-[20px] opacity-60 hover:opacity-100 hover:cursor-pointer">
-                                                <Image src="/Microphone Icon.png" alt="Send Icon" width={64} height={64} style={{ width: "100%", height: "auto" }} />
-                                            </div>
-                                        </div>
-                                        <button aria-label="Send message" disabled={isSending || !newMessage.trim() || !selectedChat} onClick={sendMessage}>
-                                            <div className="w-[25px]">
-                                                <Image src="/Send Icon.png" alt="Send Icon" width={64} height={64} style={{ width: "100%", height: "auto" }} />
-                                            </div>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
+                            <ChatComposer target={target} dropTarget={dropTarget} placeholder="Write a Message..." onSent={scroll.onSent} />
                         </div>
                     </div>
                 </div>

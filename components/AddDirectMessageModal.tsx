@@ -1,287 +1,91 @@
 "use client";
+import { useEffect, useRef, useState } from 'react';
+import { collection, doc, getDoc, limit, onSnapshot, query, runTransaction, serverTimestamp, where } from 'firebase/firestore';
 import { useDialog } from '@/hooks/useDialog';
+import { auth, db } from '@/firebaseConfig';
+import { ensureDirectoryProfile } from '@/utils/memberDirectory';
+import { normalizeName, MemberName } from '@/utils/memberNames';
+import styles from './Messaging.module.css';
 
-import { useState, useRef, useEffect } from 'react';
-import { collection, doc, getDoc, getDocs, query, limit, runTransaction, Timestamp, where } from 'firebase/firestore';
-import { ADMIN_EMAIL } from '@/utils/notifications';
-import { auth, db } from '../firebaseConfig';
-import Image from 'next/image';
-
-interface UserProfile {
-    uid: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    selectedAvatar: string | null;
-    companyName: string | null;
-}
-
-interface AddDirectMessageModalProps {
-    onClose: () => void;
-    onConversationCreated: (convoId: string) => void;
-}
-
-const AddDirectMessageModal = ({ onClose, onConversationCreated }: AddDirectMessageModalProps) => {
-    const searchVersion = useRef(0);
+interface Member extends MemberName { uid: string; }
+interface Props { onClose: () => void; onConversationCreated: (id: string) => void; }
+export default function AddDirectMessageModal({ onClose, onConversationCreated }: Props) {
+    const [search, setSearch] = useState('');
+    const [results, setResults] = useState<Member[]>([]);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    useEffect(() => () => { searchVersion.current++; }, []);
-    const [emailInput, setEmailInput] = useState('');
-    const [status, setStatus] = useState<'idle' | 'loading' | 'found' | 'notFound' | 'exists' | 'creating'>('idle');
-    const [foundUser, setFoundUser] = useState<UserProfile | null>(null);
+    const [creating, setCreating] = useState('');
+    const [attempt, setAttempt] = useState(0);
+    const inFlight = useRef(false);
+    const version = useRef(0);
+    const dialog = useDialog<HTMLDivElement>(true, onClose, !!creating);
 
-    const handleSearch = async () => {
-        const trimmed = emailInput.trim().toLowerCase();
-        if (!trimmed || status === 'creating') return;
-        const version = ++searchVersion.current; setError('');
+    useEffect(() => {
+        const current = ++version.current;
+        const term = normalizeName(search);
+        setResults([]); setError(''); setLoading(!!term);
+        if (!term) return;
+        let stop: (() => void) | undefined;
+        const timer = setTimeout(() => {
+            stop = onSnapshot(query(collection(db, 'userDirectory'), where('searchPrefixes', 'array-contains', term), limit(20)), snapshot => {
+                if (version.current !== current) return;
+                setResults(snapshot.docs.filter(member => member.id !== auth.currentUser?.uid).map(member => ({ ...member.data(), uid: member.id }))
+                    .sort((a, b) => `${(a as Member).firstName} ${(a as Member).lastName}`.localeCompare(`${(b as Member).firstName} ${(b as Member).lastName}`)));
+                setLoading(false);
+            }, () => { if (version.current === current) { setLoading(false); setError('Could not search names. Please try again.'); } });
+        }, 180);
+        return () => { clearTimeout(timer); stop?.(); version.current++; };
+    }, [search, attempt]);
 
+    const startChat = async (member: Member) => {
         const me = auth.currentUser;
-        if (!me) return;
-        if (trimmed === ADMIN_EMAIL) { setError('Use your pinned Lucidify conversation to contact the team.'); setStatus('idle'); setFoundUser(null); return; }
-
-        if (trimmed === me.email?.toLowerCase()) {
-            setStatus('notFound');
-            setFoundUser(null);
-            return;
-        }
-
-        setStatus('loading');
-        setFoundUser(null);
-
+        if (!me || inFlight.current) return;
+        inFlight.current = true; setCreating(member.uid); setError('');
         try {
-            const q = query(collection(db, 'users'), where('email', '==', trimmed), limit(1));
-            const snap = await getDocs(q);
-            if (version !== searchVersion.current) return;
-
-            if (snap.empty) {
-                setStatus('notFound');
-                return;
-            }
-
-            const userDoc = snap.docs[0];
-            const data = userDoc.data();
-            const profile: UserProfile = {
-                uid: userDoc.id,
-                firstName: data.firstName || '',
-                lastName: data.lastName || '',
-                email: data.email || '',
-                selectedAvatar: data.selectedAvatar || null,
-                companyName: data.companyName || null,
-            };
-
-            // Check if DM conversation already exists
-            const convoId = [me.uid, profile.uid].sort().join('_');
-            const dmRef = doc(db, 'directMessages', convoId);
-            const dmSnap = await getDoc(dmRef);
-            if (version !== searchVersion.current) return;
-
-            if (dmSnap.exists()) {
-                setFoundUser(profile);
-                setStatus('exists');
-                return;
-            }
-
-            setFoundUser(profile);
-            setStatus('found');
-        } catch (err) {
-            if (version !== searchVersion.current) return;
-            setError('Could not search users. Please try again.'); setStatus('idle');
-        }
-    };
-
-    const handleStartChat = async () => {
-        const me = auth.currentUser;
-        if (!me || !foundUser || status === 'creating') return;
-
-        setStatus('creating'); setError('');
-
-        try {
-            // Fetch my own profile
-            const myDoc = await getDoc(doc(db, 'users', me.uid));
-            const myData = myDoc.data() || {};
-
-            const convoId = [me.uid, foundUser.uid].sort().join('_');
-            const now = Timestamp.now();
-
-            // Read before creating so repeated opens never overwrite the shared thread.
+            const myData = (await getDoc(doc(db, 'users', me.uid))).data() || {};
+            await ensureDirectoryProfile(me.uid, myData);
+            const id = [me.uid, member.uid].sort().join('_');
             await runTransaction(db, async transaction => {
-            const ref = doc(db, 'directMessages', convoId);
-            const existing = await transaction.get(ref);
-            if (!existing.exists()) transaction.set(ref, {
-                participants: [me.uid, foundUser.uid],
-                participantProfiles: {
-                    [me.uid]: {
-                        firstName: myData.firstName || '',
-                        lastName: myData.lastName || '',
-                        selectedAvatar: myData.selectedAvatar || null,
-                        companyName: myData.companyName || null,
-                        email: me.email || '',
-                    },
-                    [foundUser.uid]: {
-                        firstName: foundUser.firstName,
-                        lastName: foundUser.lastName,
-                        selectedAvatar: foundUser.selectedAvatar,
-                        companyName: foundUser.companyName,
-                        email: foundUser.email,
-                    },
-                },
-                lastMessage: '',
-                lastMessageSender: '',
-                timestamp: now,
-                unreadCounts: { [me.uid]: 0, [foundUser.uid]: 0 },
+                const ref = doc(db, 'directMessages', id);
+                const existing = await transaction.get(ref);
+                if (existing.exists()) {
+                    transaction.set(doc(db, 'users', me.uid, 'dmConversations', id), { otherUserId: member.uid }, { merge: true });
+                    transaction.set(doc(db, 'users', member.uid, 'dmConversations', id), { otherUserId: me.uid }, { merge: true });
+                    return;
+                }
+                const currentMember = (await transaction.get(doc(db, 'userDirectory', member.uid))).data();
+                const currentMe = (await transaction.get(doc(db, 'userDirectory', me.uid))).data();
+                if (!currentMember || !currentMe) throw new Error('This member is unavailable.');
+                const profile = (data: MemberName) => ({ firstName: data.firstName || '', lastName: data.lastName || '', selectedAvatar: data.selectedAvatar || null });
+                const timestamp = serverTimestamp();
+                transaction.set(ref, {
+                    participants: [me.uid, member.uid], participantProfiles: { [me.uid]: profile(currentMe), [member.uid]: profile(currentMember) },
+                    lastMessage: '', lastMessageSender: '', timestamp, unreadCounts: { [me.uid]: 0, [member.uid]: 0 },
+                });
+                transaction.set(doc(db, 'users', me.uid, 'dmConversations', id), { otherUserId: member.uid, createdAt: timestamp });
+                transaction.set(doc(db, 'users', member.uid, 'dmConversations', id), { otherUserId: me.uid, createdAt: timestamp });
             });
-
-            // Add ref to both users' dmConversations subcollection
-            transaction.set(doc(db, 'users', me.uid, 'dmConversations', convoId), {
-                otherUserId: foundUser.uid,
-                createdAt: now,
-            });
-            transaction.set(doc(db, 'users', foundUser.uid, 'dmConversations', convoId), {
-                otherUserId: me.uid,
-                createdAt: now,
-            });
-
-            });
-            onConversationCreated(convoId);
-            onClose();
-        } catch (err) {
-            setError('Could not start this conversation. Please try again.');
-            setStatus('found');
-        }
+            onConversationCreated(id); onClose();
+        } catch { setError('Could not open this conversation. Please try again.'); }
+        finally { inFlight.current = false; setCreating(''); }
     };
 
-    const handleOpenExisting = () => {
-        if (!foundUser) return;
-        const me = auth.currentUser;
-        if (!me) return;
-        const convoId = [me.uid, foundUser.uid].sort().join('_');
-        onConversationCreated(convoId);
-        onClose();
-    };
-
-    const dialogRef = useDialog<HTMLDivElement>(true, onClose, status === 'creating');
-    return (
-        <div
-            className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-[12px] sm:p-[20px]"
-            onClick={() => { if (status !== 'creating') onClose(); }}
-        >
-            <div
-                ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="New message" className="DashboardDialog w-full max-w-[460px] BlackGradient ContentCardShadow rounded-[28px] px-[28px] py-[28px] flex flex-col gap-[20px]"
-                onClick={e => e.stopPropagation()}
-            >
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2 className="text-[20px] font-semibold">New Message</h2>
-                        <p className="text-[12px] opacity-40 mt-[2px]">Find a user by their email address</p>
-                    </div>
-                    <button
-                        onClick={() => { if (status !== 'creating') onClose(); }}
-                        className="w-[32px] h-[32px] rounded-full BlackWithLightGradient ContentCardShadow flex items-center justify-center opacity-60 hover:opacity-100 text-[16px]"
-                    >✕</button>
-                </div>
-
-                {error && <p role="alert" className="DashboardNotice">{error}</p>}
-                {/* Email input */}
-                <div className="flex gap-[10px]">
-                    <input
-                        type="email"
-                        value={emailInput}
-                        disabled={status === 'creating'} aria-label="Recipient email" onChange={e => { searchVersion.current++; setError(''); setEmailInput(e.target.value); setStatus('idle'); setFoundUser(null); }}
-                        onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                        placeholder="Enter email address..."
-                        className="flex-1 bg-white/5 border border-white/10 rounded-[12px] px-[16px] py-[11px] text-[14px] font-light focus:outline-none focus:ring-1 focus:ring-[#725CF7] placeholder:opacity-30"
-                    />
-                    <button
-                        onClick={handleSearch}
-                        disabled={status === 'loading' || status === 'creating' || !emailInput.trim()}
-                        className="PopupAttentionGradient PopupAttentionShadow px-[18px] py-[11px] rounded-[12px] text-[13px] font-medium disabled:opacity-40 flex-shrink-0"
-                    >
-                        {status === 'loading' ? '...' : 'Search'}
-                    </button>
-                </div>
-
-                {/* Not found */}
-                {status === 'notFound' && (
-                    <div className="flex items-center gap-[12px] px-[16px] py-[14px] rounded-[14px] bg-red-500/10 border border-red-500/20">
-                        <span className="text-[18px]">🔍</span>
-                        <div>
-                            <p className="text-[13px] font-medium text-red-400">No user found</p>
-                            <p className="text-[12px] opacity-50 mt-[2px]">No account is registered with that email.</p>
-                        </div>
-                    </div>
-                )}
-
-                {/* User profile card */}
-                {(status === 'found' || status === 'exists' || status === 'creating') && foundUser && (
-                    <div className="flex flex-col gap-[16px]">
-                        <div className="BlackWithLightGradient ContentCardShadow rounded-[18px] px-[20px] py-[18px] flex items-center gap-[16px]">
-                            {/* Avatar */}
-                            <div className="w-[52px] h-[52px] rounded-full BlackGradient ContentCardShadow flex items-center justify-center overflow-hidden flex-shrink-0">
-                                {foundUser.selectedAvatar ? (
-                                    <Image
-                                        src={`/${foundUser.selectedAvatar}`}
-                                        alt={foundUser.firstName}
-                                        layout="responsive"
-                                        width={0}
-                                        height={0}
-                                    />
-                                ) : (
-                                    <span className="text-[22px] opacity-50">👤</span>
-                                )}
-                            </div>
-
-                            {/* Info */}
-                            <div className="flex-1 min-w-0">
-                                <p className="text-[16px] font-semibold truncate">
-                                    {foundUser.firstName} {foundUser.lastName}
-                                </p>
-                                {foundUser.companyName && (
-                                    <p className="text-[12px] opacity-50 truncate mt-[2px]">{foundUser.companyName}</p>
-                                )}
-                                <p className="text-[12px] opacity-40 truncate mt-[1px]">{foundUser.email}</p>
-                            </div>
-
-                            {/* Verified badge */}
-                            <div className="flex-shrink-0 flex items-center gap-[5px] bg-green-500/10 border border-green-500/20 px-[10px] py-[4px] rounded-full">
-                                <span className="text-[10px] text-green-400 font-medium">✓ Found</span>
-                            </div>
-                        </div>
-
-                        {/* Already exists notice */}
-                        {status === 'exists' && (
-                            <div className="flex items-center gap-[10px] px-[14px] py-[12px] rounded-[12px] bg-[#725CF7]/10 border border-[#725CF7]/20">
-                                <span className="text-[16px]">💬</span>
-                                <p className="text-[13px] opacity-70">You already have a conversation with this person.</p>
-                            </div>
-                        )}
-
-                        {/* Action button */}
-                        {status === 'found' && (
-                            <button
-                                onClick={handleStartChat}
-                                className="PopupAttentionGradient PopupAttentionShadow w-full py-[13px] rounded-[14px] text-[14px] font-semibold"
-                            >
-                                Start Conversation →
-                            </button>
-                        )}
-                        {status === 'exists' && (
-                            <button
-                                onClick={handleOpenExisting}
-                                className="PopupAttentionGradient PopupAttentionShadow w-full py-[13px] rounded-[14px] text-[14px] font-semibold"
-                            >
-                                Open Conversation →
-                            </button>
-                        )}
-                        {status === 'creating' && (
-                            <div className="w-full py-[13px] rounded-[14px] text-[14px] font-semibold text-center opacity-50 BlackWithLightGradient">
-                                Creating conversation...
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
+    return <div className={styles.overlay} onClick={event => { if (!creating && event.target === event.currentTarget) onClose(); }}>
+        <div ref={dialog} className={`DashboardDialog ${styles.directory}`} tabIndex={-1} role="dialog" aria-modal="true" aria-label="New message">
+            <div className={styles.heading}><div><h2>New message</h2><p>Find someone by their name.</p></div><button aria-label="Close new message" disabled={!!creating} onClick={onClose}>×</button></div>
+            <label className={styles.searchLabel} htmlFor="recipient-name">Name</label>
+            <input id="recipient-name" autoFocus autoComplete="off" placeholder="Start typing a name…" maxLength={80} value={search} disabled={!!creating} onChange={event => { version.current++; setResults([]); setSearch(event.target.value); }} className={styles.search} />
+            {error && <p role="alert" className={styles.error}>{error} <button onClick={() => setAttempt(value => value + 1)}>Retry</button></p>}
+            <div role="status" className={styles.hint}>{loading ? 'Searching…' : !search.trim() ? 'Results update as you type.' : !error && !results.length ? 'No matching names. Try a different spelling.' : `${results.length} ${results.length === 1 ? 'person' : 'people'} found`}</div>
+            <ul className={styles.results} aria-label="Matching people">{results.map(member => {
+                const name = `${member.firstName || ''} ${member.lastName || ''}`.trim() || 'Lucidify member';
+                return <li key={member.uid}><button disabled={!!creating} onClick={() => startChat(member)} aria-label={`Message ${name}`}>
+                    {member.selectedAvatar && /^Avatar (?:[1-9]|1\d|2[0-4])\.png$/.test(member.selectedAvatar) ? <img src={`/${member.selectedAvatar}`} alt="" width={42} height={42} /> : <span className={styles.initial}>{name.charAt(0)}</span>}
+                    <span className={styles.person}><strong>{name}</strong><small>{creating === member.uid ? 'Opening…' : 'Start or open a conversation'}</small></span><span aria-hidden="true">→</span>
+                </button></li>;
+            })}</ul>
+            {results.length >= 19 && <p className={styles.hint}>Keep typing to narrow the results.</p>}
+            <p className={styles.hint}>To contact the Lucidify team, use your pinned Lucidify chat.</p>
         </div>
-    );
-};
-
-export default AddDirectMessageModal;
+    </div>;
+}
