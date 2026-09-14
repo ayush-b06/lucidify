@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useRouter } from 'next/navigation';
@@ -114,6 +114,10 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
     const { theme } = useTheme();
     const isDark = theme === 'dark';
 
+    const saveLock = useRef(false);
+    const [saveError, setSaveError] = useState('');
+    const [loadError, setLoadError] = useState('');
+    const [loadAttempt, setLoadAttempt] = useState(0);
     const [step, setStep] = useState(1);
     const [visible, setVisible] = useState(true);
     const [goingForward, setGoingForward] = useState(true);
@@ -138,11 +142,20 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
     const [maintenance, setMaintenance] = useState('');
 
     useEffect(() => {
+        let active = true;
         const load = async () => {
+            setInitialLoading(true);
+            setLoadError('');
             try {
                 const snap = await getDoc(doc(db, 'users', userId, 'projects', projectId));
+                if (!active) return;
                 if (snap.exists()) {
                     const d = snap.data();
+                    if (d.setupComplete || d.approval?.toLowerCase() === 'approved') {
+                        router.replace(`/dashboard/projects/${projectId}`);
+                        return;
+                    }
+                    if (Number.isInteger(d.setupStep)) setStep(Math.min(TOTAL_STEPS, Math.max(1, d.setupStep)));
                     if (d.projectName) setProjectName(d.projectName);
                     if (d.dueDate) { setDueDate(d.dueDate); setDueDatePreset('Custom'); setShowDatePicker(true); }
                     if (d.logoUrl) { setSavedLogoUrl(d.logoUrl); setLogoPreview(d.logoUrl); }
@@ -151,16 +164,16 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
                     if (d.estimatedBudget) setBudget(d.estimatedBudget);
                     if (d.paymentPlan) setPaymentPlan(d.paymentPlan);
                     if (d.maintenancePlan) setMaintenance(d.maintenancePlan);
-                }
+                } else { setLoadError('Project not found. Return to projects to choose another.'); }
             } catch (err) {
-                console.error(err);
+                if (active) setLoadError('We couldn’t load your project. Please try again.');
             } finally {
-                setInitialLoading(false);
+                if (active) setInitialLoading(false);
             }
         };
         load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        return () => { active = false; };
+    }, [userId, projectId, router, loadAttempt]);
 
     const navigate = (to: number) => {
         setGoingForward(to > step);
@@ -168,68 +181,56 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
         setTimeout(() => { setStep(to); setVisible(true); }, 180);
     };
 
-    const saveCurrentStep = async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const updates: Record<string, any> = {};
-        if (step === 1 && dueDate && dueDate !== 'custom') updates.dueDate = dueDate;
-        if (step === 3 && platform) updates.platform = platform;
-        if (step === 4) updates.subpages = selectedSubpages;
-        if (step === 5) {
-            if (budget) updates.estimatedBudget = budget;
-            if (paymentPlan) updates.paymentPlan = paymentPlan;
+    const saveDraft = async (nextStep: number, complete = false) => {
+        let logoUrl = savedLogoUrl;
+        if (logoFile) {
+            setLogoUploading(true);
+            try {
+                const formData = new FormData();
+                formData.append('file', logoFile);
+                formData.append('upload_preset', 'Unsigned Presets');
+                const response = await fetch('https://api.cloudinary.com/v1_1/dldxkfbz4/image/upload', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (!response.ok || !data.secure_url) throw new Error('Logo upload failed. Please try again.');
+                logoUrl = data.secure_url;
+                setSavedLogoUrl(logoUrl);
+                setLogoFile(null);
+            } finally { setLogoUploading(false); }
         }
-        if (step === 6 && maintenance) updates.maintenancePlan = maintenance;
-        if (Object.keys(updates).length > 0) {
-            await updateDoc(doc(db, 'users', userId, 'projects', projectId), updates).catch(console.error);
+        await updateDoc(doc(db, 'users', userId, 'projects', projectId), {
+            dueDate: dueDate && dueDate !== 'custom' ? dueDate : null,
+            logoUrl, platform, subpages: selectedSubpages, estimatedBudget: budget,
+            paymentPlan, maintenancePlan: maintenance, setupStep: nextStep,
+            ...(complete && { setupComplete: true, approval: 'Pending' }),
+        });
+    };
+
+    const persistAndContinue = async (exit = false) => {
+        if (saveLock.current) return;
+        const complete = !exit && step === TOTAL_STEPS;
+        if (complete && (!platform || !budget || !paymentPlan || !maintenance)) {
+            setSaveError('Choose a platform, budget, payment preference, and support option before submitting.');
+            return;
         }
-    };
-
-    const uploadLogo = async (): Promise<string | null> => {
-        if (!logoFile) return null;
-        setLogoUploading(true);
-        try {
-            const fd = new FormData();
-            fd.append('file', logoFile);
-            fd.append('upload_preset', 'Unsigned Presets');
-            const res = await fetch('https://api.cloudinary.com/v1_1/dldxkfbz4/image/upload', { method: 'POST', body: fd });
-            const data = await res.json();
-            return data.secure_url || null;
-        } catch { return null; }
-        finally { setLogoUploading(false); }
-    };
-
-    const handleNext = async () => {
-        await saveCurrentStep();
-        if (step < TOTAL_STEPS) navigate(step + 1);
-        else await handleFinish();
-    };
-
-    const handleSkip = () => {
-        if (step < TOTAL_STEPS) navigate(step + 1);
-        else handleFinish();
-    };
-
-    const handleFinish = async () => {
+        saveLock.current = true;
         setSubmitting(true);
+        setSaveError('');
+        const nextStep = exit ? step : Math.min(TOTAL_STEPS, step + 1);
         try {
-            let logoUrl: string | null = savedLogoUrl;
-            if (logoFile) logoUrl = await uploadLogo();
-            await updateDoc(doc(db, 'users', userId, 'projects', projectId), {
-                ...(dueDate && dueDate !== 'custom' && { dueDate }),
-                ...(logoUrl && { logoUrl }),
-                ...(platform && { platform }),
-                subpages: selectedSubpages,
-                ...(budget && { estimatedBudget: budget }),
-                ...(paymentPlan && { paymentPlan }),
-                ...(maintenance && { maintenancePlan: maintenance }),
-                setupComplete: true,
-            });
-            router.push(`/dashboard/projects/${projectId}?userId=${userId}&projectId=${projectId}`);
-        } catch (err) {
-            console.error(err);
+            await saveDraft(nextStep, complete);
+            if (exit) router.push('/dashboard/projects');
+            else if (complete) router.push(`/dashboard/projects/${projectId}`);
+            else navigate(nextStep);
+        } catch {
+            setSaveError('We couldn’t save your project. Your answers are still here. Please try again.');
+        } finally {
+            saveLock.current = false;
             setSubmitting(false);
         }
     };
+
+    const handleNext = () => { if (canProceed()) void persistAndContinue(); };
+    const handleSkip = () => { void persistAndContinue(); };
 
     const toggleSubpage = (id: string) =>
         setSelectedSubpages(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
@@ -277,6 +278,10 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
         );
     }
 
+    if (loadError) return <div className="min-h-screen DashboardBackgroundGradient flex flex-col items-center justify-center gap-4">
+        <p role="alert">{loadError}</p><button onClick={() => setLoadAttempt(value => value + 1)}>Try again</button><Link href="/dashboard/projects">Back to projects</Link>
+    </div>;
+
     const current = STEP_INFO[step - 1];
 
     return (
@@ -295,13 +300,14 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
                     <span className="text-[13px] hidden sm:block" style={{ color: mutedColor }}>
                         Setting up: <span className="font-medium" style={{ color: textColor }}>{projectName || 'Your Project'}</span>
                     </span>
-                    <Link
-                        href="/dashboard/projects"
+                    <button
+                        disabled={submitting || !visible}
+                        onClick={() => void persistAndContinue(true)}
                         className="text-[13px] px-[14px] h-[34px] rounded-[10px] flex items-center transition-opacity hover:opacity-70"
                         style={{ background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)', color: mutedColor }}
                     >
-                        Save & exit
-                    </Link>
+                        {submitting ? 'Saving...' : 'Save & exit'}
+                    </button>
                 </div>
             </div>
 
@@ -324,6 +330,7 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
                 ))}
             </div>
 
+            {saveError && <p role="alert" className="mx-auto max-w-[580px] px-6 py-3">{saveError}</p>}
             {/* ── Animated step content ── */}
             <div className="flex-1 flex items-start sm:items-center justify-center px-[20px] py-[24px] overflow-y-auto">
                 <div
@@ -609,6 +616,7 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
                     <div className="flex items-center gap-[10px]">
                         {step > 1 && (
                             <button
+                                disabled={submitting || !visible}
                                 onClick={() => navigate(step - 1)}
                                 className="h-[50px] px-[20px] rounded-[14px] text-[14px] font-medium transition-opacity hover:opacity-70 flex-shrink-0"
                                 style={{
@@ -623,6 +631,7 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
 
                         {current.optional && (
                             <button
+                                disabled={submitting || !visible}
                                 onClick={handleSkip}
                                 className="h-[50px] px-[20px] rounded-[14px] text-[14px] font-medium transition-opacity hover:opacity-70 flex-shrink-0"
                                 style={{
@@ -637,7 +646,7 @@ const DASHBOARDClientProjectSetup: React.FC<Props> = ({ userId, projectId }) => 
 
                         <button
                             onClick={handleNext}
-                            disabled={!canProceed() || submitting || logoUploading}
+                            disabled={!canProceed() || submitting || logoUploading || !visible}
                             className="flex-1 h-[50px] rounded-[14px] text-[15px] font-semibold transition-all hover:opacity-90 disabled:opacity-35 active:scale-[0.98]"
                             style={{
                                 background: 'radial-gradient(ellipse 80% 110% at 50% -5%, #251470 0%, #3e28a8 40%, #5c3ecc 70%, #7255e0 100%)',

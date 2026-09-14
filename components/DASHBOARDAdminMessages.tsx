@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { getAuth } from 'firebase/auth';
 import {
-    addDoc,
+    writeBatch,
+    increment,
+    serverTimestamp,
     collection,
     getDocs,
     onSnapshot,
@@ -20,7 +22,6 @@ import { writeNotification } from '../utils/notifications';
 import Image from 'next/image';
 import DashboardAdminSideNav from './DashboardAdminSideNav';
 import DashboardTopBar from './DashboardTopBar';
-import { useTheme } from '@/context/themeContext';
 
 // Types
 interface Conversation {
@@ -56,12 +57,12 @@ const DASHBOARDAdminMessages: React.FC = () => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [selectedChat, setSelectedChat] = useState<Conversation | null>(null);
     const [newMessage, setNewMessage] = useState<string>('');
+    const [isSending, setIsSending] = useState(false);
+    const [sendError, setSendError] = useState('');
+    const sendLock = useRef(false);
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
-    const { setTheme } = useTheme();
     const unsubscribeRef = useRef<(() => void) | null>(null);
-
-    useEffect(() => { setTheme('light'); }, []);
 
     // Clean up listener on unmount
     useEffect(() => {
@@ -151,6 +152,8 @@ const DASHBOARDAdminMessages: React.FC = () => {
     };
 
     const handleChatSelect = async (conversation: Conversation) => {
+        if (sendLock.current) return;
+        setSendError('');
         setSelectedChat(conversation);
         fetchMessages(conversation.userId, conversation.id);
         setMobileView('chat');
@@ -192,83 +195,36 @@ const DASHBOARDAdminMessages: React.FC = () => {
 
 
     const sendMessage = async () => {
-        if (newMessage.trim() === '' || !selectedChat) return;
-
-        const newTimestamp = Timestamp.fromDate(new Date());
-
-        const messageData = {
-            text: newMessage,
-            sender: "Lucidify",
-            timestamp: newTimestamp,
-            isRead: false,
-        };
-
+        const text = newMessage.trim();
+        if (!text || !selectedChat || sendLock.current) return;
+        sendLock.current = true;
+        setIsSending(true);
+        setSendError('');
+        const chat = selectedChat;
+        const reference = doc(db, 'users', chat.userId, 'conversations', chat.id);
+        const timestamp = serverTimestamp();
+        const batch = writeBatch(db);
+        batch.set(doc(collection(reference, 'messages')), { text, sender: 'Lucidify', timestamp, isRead: false });
+        batch.update(reference, {
+            lastMessage: text, lastMessageSender: 'Lucidify', timestamp,
+            [`unreadCounts.${chat.userId}`]: increment(1),
+        });
         try {
-            // 1. Add the new message
-            await addDoc(
-                collection(db, "users", selectedChat.userId, "conversations", selectedChat.id, "messages"),
-                messageData
-            );
-
-            // 2. Update conversation metadata
-            const conversationRef = doc(db, "users", selectedChat.userId, "conversations", selectedChat.id);
-
-            const updatedUnreadCounts = {
-                ...selectedChat.unreadCounts,
-                [selectedChat.userId]: (selectedChat.unreadCounts?.[selectedChat.userId] || 0) + 1 // 🔑 increment client’s count
-            };
-
-            await updateDoc(conversationRef, {
-                lastMessage: newMessage,
-                timestamp: newTimestamp,
-                lastMessageSender: "Lucidify",
-                unreadCounts: updatedUnreadCounts,
-            });
-
-            // 3. Update local state
-            setConversations((prevConvos) =>
-                prevConvos.map((convo) =>
-                    convo.id === selectedChat.id && convo.userId === selectedChat.userId
-                        ? {
-                            ...convo,
-                            lastMessage: newMessage,
-                            timestamp: newTimestamp,
-                            lastMessageSender: "Lucidify",
-                            unreadCounts: updatedUnreadCounts,
-                        }
-                        : convo
-                )
-            );
-
-            setSelectedChat((prev) =>
-                prev
-                    ? {
-                        ...prev,
-                        lastMessage: newMessage,
-                        timestamp: newTimestamp,
-                        lastMessageSender: "Lucidify",
-                        unreadCounts: updatedUnreadCounts,
-                    }
-                    : prev
-            );
-
-            setNewMessage("");
-
-            // Notify the client
-            const preview = newMessage.length > 80 ? newMessage.slice(0, 80) + '…' : newMessage;
-            writeNotification(
-                selectedChat.userId,
-                'New message from Lucidify',
-                preview,
-                'message',
-                undefined,
-                '/dashboard/messages',
-            );
-        } catch (error) {
-            console.error("Error sending message:", error);
+            await batch.commit();
+            setConversations(previous => previous.map(conversation =>
+                conversation.id === chat.id && conversation.userId === chat.userId
+                    ? { ...conversation, lastMessage: text, timestamp: Timestamp.now(), lastMessageSender: 'Lucidify' }
+                    : conversation
+            ));
+            setNewMessage('');
+            void writeNotification(chat.userId, 'New message from Lucidify', text.slice(0, 80), 'message', undefined, '/dashboard/messages');
+        } catch {
+            setSendError('Your message wasn’t sent. Please try again; your draft is still here.');
+        } finally {
+            sendLock.current = false;
+            setIsSending(false);
         }
     };
-
 
     const formatTimestamp = (timestamp?: Timestamp | null): string => {
         if (!timestamp) return ''; // Handle null or undefined
@@ -359,7 +315,7 @@ const DASHBOARDAdminMessages: React.FC = () => {
                                                 >
                                                     <div className="rounded-[5px] BlackGradient ContentCardShadow flex justify-center items-center flex-shrink-0">
                                                         <div className="w-[30px] mx-[8px] my-[8px] rounded-full overflow-clip">
-                                                            <Image src={'/' + conversation.selectedAvatar || '/Lucidify Umbrella.png'} alt="Avatar" layout="responsive" width={0} height={0} />
+                                                            <Image src={conversation.selectedAvatar ? '/' + conversation.selectedAvatar : '/Lucidify Umbrella.png'} alt="Avatar" layout="responsive" width={0} height={0} />
                                                         </div>
                                                     </div>
                                                     <div className="flex flex-col h-full flex-grow min-w-0">
@@ -405,7 +361,7 @@ const DASHBOARDAdminMessages: React.FC = () => {
                                     <div className="rounded-[5px] BlackGradient ContentCardShadow flex justify-center items-center flex-shrink-0">
                                         <div className="w-[30px] h-[30px] flex items-center mx-[8px] my-[8px] rounded-full overflow-clip">
                                             {selectedChat ? (
-                                                <Image src={'/' + selectedChat.selectedAvatar || '/Lucidify Umbrella.png'} alt="Avatar" layout="responsive" width={0} height={0} />
+                                                <Image src={selectedChat.selectedAvatar ? '/' + selectedChat.selectedAvatar : '/Lucidify Umbrella.png'} alt="Avatar" layout="responsive" width={0} height={0} />
                                             ) : (
                                                 <Image src="/Lucidify Umbrella.png" alt="Lucidify Logo" layout="responsive" width={0} height={0} />
                                             )}
@@ -469,7 +425,7 @@ const DASHBOARDAdminMessages: React.FC = () => {
                                                 <div className="inline-flex gap-[10px] sm:gap-[15px]">
                                                     <div className="rounded-[5px] BlackGradient ContentCardShadow inline-flex justify-center items-center self-start flex-shrink-0">
                                                         <div className="w-[30px] h-[30px] mx-[8px] my-[8px] flex items-center rounded-full overflow-clip">
-                                                            <Image src={'/' + selectedChat?.selectedAvatar || '/Lucidify Umbrella.png'} alt="Avatar" layout="responsive" width={0} height={0} />
+                                                            <Image src={selectedChat?.selectedAvatar ? '/' + selectedChat?.selectedAvatar : '/Lucidify Umbrella.png'} alt="Avatar" layout="responsive" width={0} height={0} />
                                                         </div>
                                                     </div>
                                                     <div className="flex flex-col gap-[10px]">
@@ -494,11 +450,16 @@ const DASHBOARDAdminMessages: React.FC = () => {
                                 ))}
                             </div>
 
+                            {sendError && <p role="alert" className="px-5 py-3 text-[13px]">{sendError}</p>}
                             {/* Bottom part */}
                             <div className="BlackGradient ContentCardShadow rounded-b-[35px] sm:rounded-bl-none sm:rounded-br-[35px] px-[20px] sm:px-[50px] py-[17px] flex gap-[25px] flex-shrink-0">
                                 <div className="BlackWithLightGradient ContentCardShadow rounded-[10px] flex gap-[25px] px-[15px] sm:px-[25px] py-[13px] w-full">
                                     <input
                                         type="text"
+                                        disabled={isSending || !selectedChat}
+                                        maxLength={5000}
+                                        aria-label="Message"
+                                        onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); void sendMessage(); } }}
                                         value={newMessage}
                                         onChange={(e) => setNewMessage(e.target.value)}
                                         placeholder="Write a Message..."
@@ -513,7 +474,7 @@ const DASHBOARDAdminMessages: React.FC = () => {
                                                 <Image src="/Microphone Icon.png" alt="Send Icon" layout="responsive" width={0} height={0} />
                                             </div>
                                         </div>
-                                        <button onClick={sendMessage}>
+                                        <button aria-label="Send message" disabled={isSending || !newMessage.trim() || !selectedChat} onClick={sendMessage}>
                                             <div className="w-[25px]">
                                                 <Image src="/Send Icon.png" alt="Send Icon" layout="responsive" width={0} height={0} />
                                             </div>

@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{document=**} {
+      allow read, write: if request.auth != null && request.auth.token.email == 'ayush.bhujle@gmail.com';
+    }
+    match /directMessages/{conversationId} {
+      allow read: if request.auth != null && request.auth.uid in resource.data.participants;
+      allow write: if request.auth != null && request.auth.uid in resource.data.participants;
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/directMessages/$(conversationId)).data.participants;
+      }
+    }
+    // Local emulator fixture only; never deploy these as production rules.
+    match /users/{userId}/{document=**} {
+      function ownsProfile() { return request.auth != null && (request.auth.uid == userId || request.auth.token.email == 'ayush.bhujle@gmail.com'); }
+      function blocked(flag) {
+        return exists(/databases/$(database)/documents/users/$(userId)) &&
+          get(/databases/$(database)/documents/users/$(userId)).data.get(flag, false) == true;
+      }
+      allow read: if ownsProfile() && !blocked('denyReads');
+      allow write: if ownsProfile() && !blocked('denyWrites') &&
+        (!blocked('denyConversationMetadataWrites') || !request.resource.data.keys().hasAny(['lastMessage']));
+    }
+  }
+}

@@ -1,35 +1,17 @@
 "use client";
-
 import { Suspense } from 'react';
-import { useAuth } from '@/context/authContext';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import DASHBOARDClientProjectSetup from '@/components/DASHBOARDClientProjectSetup';
-import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { useProjectRoute } from '@/hooks/useProjectRoute';
+import DASHBOARDClientProjectSetup from "@/components/DASHBOARDClientProjectSetup";
 
-const SetupPageInner = () => {
-    const { user, loading } = useAuth();
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const userId = searchParams.get('userId');
-    const projectId = searchParams.get('projectId');
-
-    useEffect(() => {
-        if (!loading && !user) {
-            router.push('/login');
-        }
-    }, [user, loading, router]);
-
-    if (loading || !user) return null;
-    if (!userId || !projectId) return null;
-
-    return <DASHBOARDClientProjectSetup userId={userId} projectId={projectId} />;
-};
-
-const SetupPage = () => (
-    <Suspense fallback={null}>
-        <SetupPageInner />
-    </Suspense>
-);
-
-export default SetupPage;
+function ProjectPageContent() {
+  const { loading, isAdmin, userId, projectId } = useProjectRoute();
+  if (loading) return <p role="status" className="p-8">Loading project...</p>;
+  if (!userId || !projectId) return (
+    <div className="p-8"><p>Select a client project to continue.</p><Link href="/dashboard/projects">Back to projects</Link></div>
+  );
+  return <DASHBOARDClientProjectSetup userId={userId} projectId={projectId} />;
+}
+export default function ProjectPage() {
+  return <Suspense fallback={<p role="status" className="p-8">Loading project...</p>}><ProjectPageContent /></Suspense>;
+}

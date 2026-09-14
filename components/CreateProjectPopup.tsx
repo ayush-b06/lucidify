@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { useAuth } from '@/context/authContext';
+import { useRouter } from 'next/navigation';
 import { useTheme } from '@/context/themeContext';
 
 interface CreateProjectPopupProps {
@@ -14,6 +15,8 @@ interface CreateProjectPopupProps {
 
 const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProjectPopup, isVisible, onCreated }) => {
     const { user } = useAuth();
+    const router = useRouter();
+    const submitLock = useRef(false);
     const { theme } = useTheme();
     const isDark = theme === 'dark';
 
@@ -42,15 +45,16 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return;
+        if (!user || submitLock.current) return;
         if (!projectName.trim()) {
             setError('Give your project a name first.');
             return;
         }
+        submitLock.current = true;
         setLoading(true);
         setError('');
         try {
-            await addDoc(collection(db, 'users', user.uid, 'projects'), {
+            const project = await addDoc(collection(db, 'users', user.uid, 'projects'), {
                 projectName: projectName.trim(),
                 projectDescription: projectDescription.trim(),
                 dateCreated: new Date().toISOString(),
@@ -61,9 +65,12 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
             });
             closeCreatProjectPopup();
             onCreated?.();
+            router.push(`/dashboard/projects/${project.id}/setup`);
         } catch (err) {
             console.error(err);
             setError('Something went wrong. Please try again.');
+        } finally {
+            submitLock.current = false;
             setLoading(false);
         }
     };
@@ -103,7 +110,7 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
                 opacity: entered ? 1 : 0,
                 transition: 'opacity 0.18s ease',
             }}
-            onClick={(e) => { if (e.target === e.currentTarget) closeCreatProjectPopup(); }}
+            onClick={(e) => { if (!loading && e.target === e.currentTarget) closeCreatProjectPopup(); }}
         >
             <div
                 className="relative w-full max-w-[460px] rounded-[28px] overflow-hidden"
@@ -131,6 +138,8 @@ const CreateProjectPopup: React.FC<CreateProjectPopupProps> = ({ closeCreatProje
                 <div className="px-[32px] pt-[32px] pb-[24px] text-center relative">
                     {/* Close button */}
                     <button
+                        disabled={loading}
+                        aria-label="Close new project"
                         onClick={closeCreatProjectPopup}
                         className="absolute top-[16px] right-[16px] flex items-center justify-center w-[30px] h-[30px] rounded-[9px] transition-opacity hover:opacity-60"
                         style={{

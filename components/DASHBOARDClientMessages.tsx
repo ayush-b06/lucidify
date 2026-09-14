@@ -1,297 +1,202 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
-import { getAuth } from 'firebase/auth';
-import {
-    addDoc, collection, doc, getDoc, getDocs, increment,
-    onSnapshot, orderBy, query, Timestamp, updateDoc
-} from 'firebase/firestore';
-import { auth, db } from '../firebaseConfig';
+import { collection, doc, getDoc, increment, onSnapshot, orderBy, query, serverTimestamp, Timestamp, updateDoc, writeBatch } from 'firebase/firestore';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import { db } from '../firebaseConfig';
+import { useAuth } from '@/context/authContext';
+import { ClientConversation as ConvoItem, conversationKey, useClientConversations } from '@/hooks/useClientConversations';
 import { writeAdminNotification } from '../utils/notifications';
 import DashboardClientSideNav from './DashboardClientSideNav';
 import Image from 'next/image';
 import AddDirectMessageModal from './AddDirectMessageModal';
 import DashboardTopBar from './DashboardTopBar';
-import { useTheme } from '@/context/themeContext';
 
 interface Message {
     id: string;
     text: string;
     sender: string;
-    timestamp: Timestamp;
-}
-
-// Unified conversation entry for sidebar
-interface ConvoItem {
-    id: string;          // for Lucidify: conversation doc id; for DM: directMessages convoId
-    type: 'lucidify' | 'direct';
-    title: string;
-    avatarSrc: string | null; // null = show initials
-    isPinned: boolean;
     timestamp: Timestamp | null;
-    lastMessage: string;
-    unreadCount: number;
-    otherUserId?: string; // only for DMs
+    pending?: boolean;
 }
 
 const DASHBOARDClientMessages = () => {
-    const authInstance = getAuth();
-    const { setTheme } = useTheme();
-    useEffect(() => { setTheme('light'); }, []);
-
-    const [convos, setConvos] = useState<ConvoItem[]>([]);
+    const { user } = useAuth();
+    const userId = user?.uid;
+    const { convos, loading: conversationsLoading, error: conversationsError, retry: retryConversations } = useClientConversations(userId);
     const [messages, setMessages] = useState<Message[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [newMessage, setNewMessage] = useState('');
+    const [drafts, setDrafts] = useState<Record<string, string>>({});
+    const [sendErrors, setSendErrors] = useState<Record<string, string>>({});
     const [myAvatar, setMyAvatar] = useState<string | null>(null);
-    const [myFirstName, setMyFirstName] = useState<string>('');
+    const [myFirstName, setMyFirstName] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
     const [isDMModalOpen, setIsDMModalOpen] = useState(false);
     const [isSending, setIsSending] = useState(false);
-
+    const [messagesLoading, setMessagesLoading] = useState(false);
+    const [messagesError, setMessagesError] = useState('');
+    const [readError, setReadError] = useState('');
+    const [messageAttempt, setMessageAttempt] = useState(0);
+    const [pageVisible, setPageVisible] = useState(true);
+    const [desktopChat, setDesktopChat] = useState(false);
+    const sendLock = useRef(false);
+    const draftValues = useRef<Record<string, string>>({});
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
+    const keepAtBottom = useRef(true);
+    const selectedConvo = convos.find(c => conversationKey(c) === selectedId) || null;
+    const selectedType = selectedConvo?.type;
+    const selectedDocumentId = selectedConvo?.id;
+    const newMessage = selectedId ? drafts[selectedId] || '' : '';
+    const projectId = useSearchParams().get('projectId');
+    const [projectName, setProjectName] = useState('');
+    const [projectError, setProjectError] = useState('');
 
-    // ── Fetch my profile ──────────────────────────────────────────────────────
     useEffect(() => {
-        const fetchMyProfile = async () => {
-            const user = authInstance.currentUser;
-            if (!user) return;
-            try {
-                const snap = await getDoc(doc(db, 'users', user.uid));
-                if (snap.exists()) {
-                    const data = snap.data();
-                    setMyAvatar(data.selectedAvatar || null);
-                    setMyFirstName(data.firstName || '');
-                    // Ensure email is saved to Firestore (needed for DM search)
-                    if (!data.email && user.email) {
-                        await updateDoc(doc(db, 'users', user.uid), { email: user.email });
-                    }
-                }
-            } catch (e) { console.error(e); }
-        };
-        fetchMyProfile();
-    }, [authInstance]);
+        if (!userId) return;
+        let active = true;
+        getDoc(doc(db, 'users', userId)).then(snapshot => {
+            if (!active || !snapshot.exists()) return;
+            setMyAvatar(snapshot.data().selectedAvatar || null);
+            setMyFirstName(snapshot.data().firstName || '');
+        }).catch(console.error);
+        return () => { active = false; };
+    }, [userId]);
 
-    // ── Load all conversations (Lucidify + DMs) ───────────────────────────────
-    const loadConversations = async () => {
-        const user = auth.currentUser;
-        if (!user) return;
+    useEffect(() => {
+        setProjectName('');
+        setProjectError('');
+        if (!userId || !projectId) return;
+        let active = true;
+        getDoc(doc(db, 'users', userId, 'projects', projectId)).then(snapshot => {
+            if (!active) return;
+            if (snapshot.exists()) setProjectName(snapshot.data().projectName || 'Your project');
+            else setProjectError('This project is unavailable. You can still message the team.');
+        }).catch(() => { if (active) setProjectError('Project details couldn’t load. You can still message the team.'); });
+        return () => { active = false; };
+    }, [userId, projectId]);
 
-        const items: ConvoItem[] = [];
-
-        // 1. Lucidify conversations
-        try {
-            const snap = await getDocs(collection(db, 'users', user.uid, 'conversations'));
-            snap.forEach(d => {
-                const data = d.data();
-                items.push({
-                    id: d.id,
-                    type: 'lucidify',
-                    title: data.title || 'Lucidify',
-                    avatarSrc: null,
-                    isPinned: data.isPinned || false,
-                    timestamp: data.timestamp || null,
-                    lastMessage: data.lastMessage || '',
-                    unreadCount: data.unreadCounts?.[user.uid] || 0,
-                });
-            });
-        } catch (e) { console.error(e); }
-
-        // 2. DM conversations
-        try {
-            const dmRefsSnap = await getDocs(collection(db, 'users', user.uid, 'dmConversations'));
-            for (const ref of dmRefsSnap.docs) {
-                const convoId = ref.id;
-                const otherUserId = ref.data().otherUserId;
-                try {
-                    const dmSnap = await getDoc(doc(db, 'directMessages', convoId));
-                    if (!dmSnap.exists()) continue;
-                    const dm = dmSnap.data();
-                    const otherProfile = dm.participantProfiles?.[otherUserId] || {};
-                    const displayName = otherProfile.firstName
-                        ? `${otherProfile.firstName} ${otherProfile.lastName || ''}`.trim()
-                        : 'Unknown';
-                    items.push({
-                        id: convoId,
-                        type: 'direct',
-                        title: displayName,
-                        avatarSrc: otherProfile.selectedAvatar || null,
-                        isPinned: false,
-                        timestamp: dm.timestamp || null,
-                        lastMessage: dm.lastMessage || '',
-                        unreadCount: dm.unreadCounts?.[user.uid] || 0,
-                        otherUserId,
-                    });
-                } catch (e) { console.error(e); }
-            }
-        } catch (e) { console.error(e); }
-
-        // Sort by timestamp desc
-        items.sort((a, b) => {
-            if (a.isPinned && !b.isPinned) return -1;
-            if (!a.isPinned && b.isPinned) return 1;
-            const ta = a.timestamp?.toMillis() || 0;
-            const tb = b.timestamp?.toMillis() || 0;
-            return tb - ta;
-        });
-
-        setConvos(items);
-
-        // Auto-select first (Lucidify) if nothing selected
-        const lucidify = items.find(c => c.type === 'lucidify');
-        if (lucidify && !selectedId) {
-            setSelectedId(lucidify.id);
-            selectConversation(lucidify);
+    useEffect(() => {
+        if (!selectedId && convos.length) {
+            const initial = convos.find(c => c.type === 'lucidify' && c.id === 'lucidify') || convos.find(c => c.type === 'lucidify') || convos[0];
+            setSelectedId(conversationKey(initial));
+            if (projectId) setMobileView('chat');
         }
-    };
+    }, [convos, selectedId, projectId]);
 
-    useEffect(() => { loadConversations(); }, []);
-
-    // ── Select a conversation (mark read + fetch messages) ───────────────────
-    const selectConversation = async (convo: ConvoItem) => {
-        setSelectedId(convo.id);
-        setMessages([]);   // clear immediately so old messages don't linger
-        setMobileView('chat');
-        const user = auth.currentUser;
-        if (!user) return;
-
-        // Reset unread count
+    const storageKey = (id: string) => `lucidify:message-draft:${userId}:${id}`;
+    const saveDraft = (id: string, value: string) => {
+        draftValues.current[id] = value;
+        setDrafts(previous => ({ ...previous, [id]: value }));
         try {
-            if (convo.type === 'lucidify') {
-                await updateDoc(doc(db, 'users', user.uid, 'conversations', convo.id), {
-                    [`unreadCounts.${user.uid}`]: 0,
-                });
-            } else {
-                await updateDoc(doc(db, 'directMessages', convo.id), {
-                    [`unreadCounts.${user.uid}`]: 0,
-                });
-            }
-        } catch (e) { /* ignore */ }
-
-        setConvos(prev => prev.map(c => c.id === convo.id ? { ...c, unreadCount: 0 } : c));
+            if (value) sessionStorage.setItem(storageKey(id), value);
+            else sessionStorage.removeItem(storageKey(id));
+        } catch { /* Drafts still work in memory when browser storage is disabled. */ }
     };
+
+    useEffect(() => {
+        if (!selectedId || !userId) return;
+        try {
+            const value = sessionStorage.getItem(`lucidify:message-draft:${userId}:${selectedId}`) || '';
+            draftValues.current[selectedId] = value;
+            setDrafts(previous => ({ ...previous, [selectedId]: value }));
+        } catch { /* Keep the in-memory draft. */ }
+    }, [selectedId, userId]);
 
     const handleChatSelect = (convo: ConvoItem) => {
-        selectConversation(convo);
+        if (conversationKey(convo) !== selectedId) {
+            setMessages([]);
+            setMessagesLoading(true);
+            setMessagesError('');
+            setSelectedId(conversationKey(convo));
+            keepAtBottom.current = true;
+        }
+        setMobileView('chat');
     };
 
-    // ── Real-time messages listener ───────────────────────────────────────────
     useEffect(() => {
-        if (!selectedId) return;
-        const user = authInstance.currentUser;
-        if (!user) return;
-
-        const selectedConvo = convos.find(c => c.id === selectedId);
-        if (!selectedConvo) return;
-
-        let messagesRef;
-        if (selectedConvo.type === 'lucidify') {
-            messagesRef = collection(db, 'users', user.uid, 'conversations', selectedId, 'messages');
-        } else {
-            messagesRef = collection(db, 'directMessages', selectedId, 'messages');
-        }
-
-        const q = query(messagesRef, orderBy('timestamp', 'asc'));
-        const unsub = onSnapshot(q, snap => {
-            const real = snap.docs.map(d => ({ id: d.id, ...d.data() } as Message));
-            // Replace state with real messages (drops any optimistic pending-* entries)
-            setMessages(real);
+        if (!selectedDocumentId || !selectedType || !userId) { setMessages([]); setMessagesLoading(false); setMessagesError(''); return; }
+        setMessages([]);
+        setMessagesLoading(true);
+        setMessagesError('');
+        const reference = selectedType === 'lucidify'
+            ? collection(db, 'users', userId, 'conversations', selectedDocumentId, 'messages')
+            : collection(db, 'directMessages', selectedDocumentId, 'messages');
+        return onSnapshot(query(reference, orderBy('timestamp', 'asc')), { includeMetadataChanges: true }, snapshot => {
+            setMessages(snapshot.docs.map(item => ({ id: item.id, ...item.data({ serverTimestamps: 'estimate' }), pending: item.metadata.hasPendingWrites } as Message)));
+            setMessagesLoading(false);
+            setMessagesError('');
+        }, () => {
+            setMessagesLoading(false);
+            setMessagesError('We couldn’t load these messages. Please try again.');
         });
+    }, [selectedDocumentId, selectedType, userId, messageAttempt]);
 
-        return () => unsub();
-    }, [selectedId, authInstance, convos]);
-
-    // ── Auto-scroll to latest message ─────────────────────────────────────────
     useEffect(() => {
-        if (messagesEndRef.current) {
-            messagesEndRef.current.scrollTop = messagesEndRef.current.scrollHeight;
-        }
+        const media = window.matchMedia('(min-width: 640px)');
+        const update = () => { setPageVisible(document.visibilityState === 'visible'); setDesktopChat(media.matches); };
+        update();
+        document.addEventListener('visibilitychange', update);
+        media.addEventListener('change', update);
+        return () => { document.removeEventListener('visibilitychange', update); media.removeEventListener('change', update); };
+    }, []);
+
+    const unreadCount = selectedConvo?.unreadCount || 0;
+    useEffect(() => {
+        setReadError('');
+        if (!userId || !selectedType || !selectedDocumentId || !unreadCount || messagesLoading || messagesError || !pageVisible || (!desktopChat && mobileView !== 'chat')) return;
+        let active = true;
+        const reference = selectedType === 'lucidify'
+            ? doc(db, 'users', userId, 'conversations', selectedDocumentId)
+            : doc(db, 'directMessages', selectedDocumentId);
+        updateDoc(reference, { [`unreadCounts.${userId}`]: 0 }).catch(() => {
+            if (active) setReadError('Messages loaded, but we couldn’t mark this conversation as read.');
+        });
+        return () => { active = false; };
+    }, [userId, selectedType, selectedDocumentId, unreadCount, messagesLoading, messagesError, pageVisible, desktopChat, mobileView, messageAttempt]);
+
+    useEffect(() => {
+        if (keepAtBottom.current && messagesEndRef.current) messagesEndRef.current.scrollTop = messagesEndRef.current.scrollHeight;
     }, [messages]);
 
-    // ── Send message ──────────────────────────────────────────────────────────
     const sendMessage = async () => {
         const text = newMessage.trim();
-        if (!text || !selectedId || isSending) return;
-        const user = authInstance.currentUser;
-        if (!user) return;
-
-        const selectedConvo = convos.find(c => c.id === selectedId);
-        if (!selectedConvo) return;
-
+        if (!text || !selectedConvo || !selectedId || !userId || sendLock.current || messagesLoading || messagesError) return;
+        const key = selectedId;
+        const draft = newMessage;
+        const outgoingText = projectName && selectedConvo.type === 'lucidify' ? `[Project: ${projectName}]\n${text}` : text;
+        const recipient = selectedConvo.type === 'lucidify' ? 'Lucidify' : selectedConvo.otherUserId;
+        if (!recipient) return;
+        sendLock.current = true;
         setIsSending(true);
-        const now = Timestamp.fromDate(new Date());
-        const msgData = { text, sender: user.uid, timestamp: now, isRead: false };
-
-        // Optimistically clear input + show message immediately
-        setNewMessage('');
-        setMessages(prev => [...prev, { id: `pending-${Date.now()}`, ...msgData }]);
-        setConvos(prev => prev.map(c =>
-            c.id === selectedId ? { ...c, lastMessage: text, timestamp: now } : c
-        ));
-
+        setSendErrors(previous => ({ ...previous, [key]: '' }));
+        keepAtBottom.current = true;
+        const reference = selectedConvo.type === 'lucidify'
+            ? doc(db, 'users', userId, 'conversations', selectedConvo.id)
+            : doc(db, 'directMessages', selectedConvo.id);
+        const batch = writeBatch(db);
+        const timestamp = serverTimestamp();
+        batch.set(doc(collection(reference, 'messages')), { text: outgoingText, sender: userId, timestamp, isRead: false });
+        batch.update(reference, { lastMessage: outgoingText, lastMessageSender: userId, timestamp, [`unreadCounts.${recipient}`]: increment(1) });
         try {
-            if (selectedConvo.type === 'lucidify') {
-                await addDoc(collection(db, 'users', user.uid, 'conversations', selectedId, 'messages'), msgData);
-                await updateDoc(doc(db, 'users', user.uid, 'conversations', selectedId), {
-                    lastMessage: text,
-                    lastMessageSender: user.uid,
-                    timestamp: now,
-                    'unreadCounts.Lucidify': increment(1),
-                });
-                // Notify admin
-                const senderName = myFirstName || 'A client';
-                const preview = text.length > 80 ? text.slice(0, 80) + '…' : text;
-                writeAdminNotification(
-                    `New message from ${senderName}`,
-                    preview,
-                    '/dashboard/messages',
-                );
-            } else {
-                await addDoc(collection(db, 'directMessages', selectedId, 'messages'), msgData);
-                const otherUid = selectedConvo.otherUserId!;
-                await updateDoc(doc(db, 'directMessages', selectedId), {
-                    lastMessage: text,
-                    lastMessageSender: user.uid,
-                    timestamp: now,
-                    [`unreadCounts.${otherUid}`]: increment(1),
-                });
-            }
-        } catch (e) {
-            console.error(e);
-            // Revert optimistic message on failure
-            setMessages(prev => prev.filter(m => !m.id.startsWith('pending-')));
-            setNewMessage(text);
+            await batch.commit();
+            // A send finishing in another chat must not erase a newer draft.
+            if (draftValues.current[key] === draft) saveDraft(key, '');
+            if (selectedConvo.type === 'lucidify') void writeAdminNotification(`New message from ${myFirstName || 'A client'}`, outgoingText.slice(0, 80), '/dashboard/messages');
+        } catch {
+            setSendErrors(previous => ({ ...previous, [key]: 'Your message wasn’t sent. Your draft is saved here; try sending again.' }));
         } finally {
+            sendLock.current = false;
             setIsSending(false);
         }
     };
 
-    // ── After DM created from modal ───────────────────────────────────────────
-    const handleDMCreated = async (convoId: string) => {
-        await loadConversations();
-        const user = auth.currentUser;
-        if (!user) return;
-        const dmSnap = await getDoc(doc(db, 'directMessages', convoId));
-        if (!dmSnap.exists()) return;
-        const dm = dmSnap.data();
-        const otherUid = dm.participants.find((p: string) => p !== user.uid);
-        const otherProfile = dm.participantProfiles?.[otherUid] || {};
-        const displayName = otherProfile.firstName
-            ? `${otherProfile.firstName} ${otherProfile.lastName || ''}`.trim()
-            : 'User';
-        const convo: ConvoItem = {
-            id: convoId,
-            type: 'direct',
-            title: displayName,
-            avatarSrc: otherProfile.selectedAvatar || null,
-            isPinned: false,
-            timestamp: dm.timestamp || null,
-            lastMessage: '',
-            unreadCount: 0,
-            otherUserId: otherUid,
-        };
-        selectConversation(convo);
+    const handleDMCreated = (convoId: string) => {
+        setSelectedId(`direct:${convoId}`);
+        setMessages([]);
+        setMobileView('chat');
+        setIsDMModalOpen(false);
     };
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -320,7 +225,6 @@ const DASHBOARDClientMessages = () => {
             : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
     };
 
-    const selectedConvo = convos.find(c => c.id === selectedId) || null;
     const groupedMessages = chunkBySender(messages);
     const filteredConvos = convos.filter(c =>
         c.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -329,8 +233,11 @@ const DASHBOARDClientMessages = () => {
     const allConvos = filteredConvos.filter(c => !c.isPinned);
 
     const ConvoRow = ({ convo }: { convo: ConvoItem }) => (
-        <div
-            className={`px-[30px] lg:px-[50px] py-[18px] lg:py-[22px] border-t-[0.5px] border-solid border-white ${selectedId === convo.id ? 'MessagesHighlightGradient border-opacity-50' : 'border-opacity-10'} text-white cursor-pointer flex gap-[15px] hover:bg-white/[0.02]`}
+        <button
+            type="button"
+            aria-label={`Open conversation with ${convo.title}`}
+            aria-pressed={selectedId === conversationKey(convo)}
+            className={`w-full text-left px-[30px] lg:px-[50px] py-[18px] lg:py-[22px] border-t-[0.5px] border-solid border-white ${selectedId === conversationKey(convo) ? 'MessagesHighlightGradient border-opacity-50' : 'border-opacity-10'} text-white cursor-pointer flex gap-[15px] hover:bg-white/[0.02]`}
             onClick={() => handleChatSelect(convo)}
         >
             {/* Avatar */}
@@ -363,7 +270,7 @@ const DASHBOARDClientMessages = () => {
                     <span className="text-[10px] opacity-30 mt-[2px]">Direct Message</span>
                 )}
             </div>
-        </div>
+        </button>
     );
 
     return (
@@ -415,10 +322,12 @@ const DASHBOARDClientMessages = () => {
 
                                 {/* Conversation list */}
                                 <div className="flex flex-col flex-1 overflow-y-auto min-h-0">
+                                    {conversationsLoading && <p role="status" className="p-5 text-[13px]">Loading conversations...</p>}
+                                    {conversationsError && <div role="alert" className="p-5 text-[13px]"><p>{conversationsError}</p><button onClick={retryConversations} className="underline mt-2">Retry conversations</button></div>}
                                     {pinnedConvos.length > 0 && (
                                         <div className="mb-[4px]">
                                             <p className="px-[30px] lg:px-[40px] pb-[8px] opacity-40 font-light text-[12px] uppercase tracking-wide">Pinned</p>
-                                            {pinnedConvos.map(c => <ConvoRow key={c.id} convo={c} />)}
+                                            {pinnedConvos.map(c => <ConvoRow key={conversationKey(c)} convo={c} />)}
                                         </div>
                                     )}
                                     {allConvos.length > 0 ? (
@@ -426,9 +335,9 @@ const DASHBOARDClientMessages = () => {
                                             <p className="px-[30px] lg:px-[40px] pb-[8px] opacity-40 font-light text-[12px] uppercase tracking-wide">
                                                 {pinnedConvos.length > 0 ? 'All Messages' : 'Conversations'}
                                             </p>
-                                            {allConvos.map(c => <ConvoRow key={c.id} convo={c} />)}
+                                            {allConvos.map(c => <ConvoRow key={conversationKey(c)} convo={c} />)}
                                         </div>
-                                    ) : convos.length === 0 ? (
+                                    ) : !conversationsLoading && !conversationsError && convos.length === 0 ? (
                                         <div className="flex flex-col items-center justify-center py-[40px] gap-[10px] opacity-40">
                                             <span className="text-[32px]">💬</span>
                                             <p className="text-[13px] font-light">No conversations yet</p>
@@ -436,11 +345,11 @@ const DASHBOARDClientMessages = () => {
                                                 Start a new message
                                             </button>
                                         </div>
-                                    ) : (
+                                    ) : !conversationsLoading && !conversationsError && filteredConvos.length === 0 && convos.length > 0 ? (
                                         <div className="flex justify-center py-[30px]">
                                             <p className="text-[13px] opacity-40">No results</p>
                                         </div>
-                                    )}
+                                    ) : null}
                                 </div>
                             </div>
 
@@ -451,6 +360,7 @@ const DASHBOARDClientMessages = () => {
                                 <div className="BlackWithLightGradient rounded-t-[35px] sm:rounded-tl-none sm:rounded-tr-[35px] px-[20px] sm:px-[40px] py-[18px] flex justify-between border-b-[0.5px] border-solid border-white border-opacity-10 flex-shrink-0 items-center gap-[12px]">
                                     <button
                                         className="sm:hidden opacity-60 hover:opacity-100 flex-shrink-0"
+                                        aria-label="Back to conversations"
                                         onClick={() => setMobileView('list')}
                                     >
                                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -478,35 +388,25 @@ const DASHBOARDClientMessages = () => {
                                         </div>
                                     </div>
 
-                                    <div className="hidden sm:flex gap-[10px] items-center flex-shrink-0">
-                                        <div className="rounded-[8px] BlackGradient ContentCardShadow flex justify-center items-center hover:cursor-pointer hover:opacity-70 w-[36px] h-[36px]">
-                                            <div className="w-[18px]">
-                                                <Image src="/Phone Call Icon.png" alt="Call" layout="responsive" width={0} height={0} />
-                                            </div>
-                                        </div>
-                                        <div className="rounded-[8px] BlackGradient ContentCardShadow flex justify-center items-center hover:cursor-pointer hover:opacity-70 w-[36px] h-[36px]">
-                                            <div className="w-[18px]">
-                                                <Image src="/Video Call Icon.png" alt="Video" layout="responsive" width={0} height={0} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col gap-[4px] hover:cursor-pointer hover:opacity-50 flex-shrink-0">
-                                        <div className="bg-white rounded-full w-[4px] h-[4px]" />
-                                        <div className="bg-white rounded-full w-[4px] h-[4px]" />
-                                        <div className="bg-white rounded-full w-[4px] h-[4px]" />
-                                    </div>
                                 </div>
+                                {projectName && selectedType === 'lucidify' && <div className="px-5 py-3 text-[13px] border-b border-white/10">
+                                    Discussing <Link className="underline" href={`/dashboard/projects/${encodeURIComponent(projectId!)}`}>{projectName}</Link>. Your message will include the project name.
+                                </div>}
+                                {projectError && <p role="status" className="px-5 py-3 text-[13px]">{projectError}</p>}
+                                {readError && <div role="alert" className="px-5 py-3 text-[13px]">{readError} <button className="underline" onClick={() => setMessageAttempt(value => value + 1)}>Retry</button></div>}
 
                                 {/* Messages */}
-                                <div ref={messagesEndRef} className="flex flex-col overflow-y-auto gap-[10px] flex-1 min-h-0 px-[20px] sm:px-[40px] py-[20px]">
-                                    {groupedMessages.length === 0 && (
+                                <div ref={messagesEndRef} onScroll={event => { const element = event.currentTarget; keepAtBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; }} className="flex flex-col overflow-y-auto gap-[10px] flex-1 min-h-0 px-[20px] sm:px-[40px] py-[20px]">
+                                    {messagesLoading && <p role="status" className="text-[13px]">Loading messages...</p>}
+                                    {messagesError && <div role="alert" className="text-[13px]"><p>{messagesError}</p><button onClick={() => setMessageAttempt(value => value + 1)} className="underline mt-2">Retry messages</button></div>}
+                                    {!messagesLoading && !messagesError && groupedMessages.length === 0 && (
                                         <div className="flex flex-col items-center justify-center h-full gap-[10px] opacity-30">
                                             <span className="text-[36px]">💬</span>
-                                            <p className="text-[14px] font-light">No messages yet. Say hello!</p>
+                                            <p className="text-[14px] font-light">{selectedConvo ? 'No messages yet. Say hello!' : 'Choose a conversation to get started.'}</p>
                                         </div>
                                     )}
                                     {groupedMessages.map((group, idx) => {
-                                        const isMe = group[0].sender === authInstance.currentUser?.uid;
+                                        const isMe = group[0].sender === userId;
                                         return (
                                             <div key={idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-[6px]`}>
                                                 <div className={`flex gap-[10px] sm:gap-[12px] max-w-[85%] sm:max-w-[75%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -537,13 +437,14 @@ const DASHBOARDClientMessages = () => {
                                                         {group.map(msg => (
                                                             <div
                                                                 key={msg.id}
-                                                                className={`text-[14px] font-light px-[15px] py-[10px] ${
+                                                                className={`whitespace-pre-wrap break-words min-w-0 text-[14px] font-light px-[15px] py-[10px] ${
                                                                     isMe
                                                                         ? 'PopupAttentionGradient PopupAttentionShadow rounded-b-[15px] rounded-tl-[15px]'
                                                                         : 'MessagesHighlightGradient ContentCardShadow rounded-b-[15px] rounded-tr-[15px]'
                                                                 }`}
                                                             >
                                                                 {msg.text}
+                                                                {msg.pending && <span className="block text-[11px] opacity-60 mt-1">Sending...</span>}
                                                             </div>
                                                         ))}
                                                         <p className="text-[11px] opacity-25 px-[4px]">{formatTimestamp(group[group.length - 1].timestamp)}</p>
@@ -554,31 +455,28 @@ const DASHBOARDClientMessages = () => {
                                     })}
                                 </div>
 
+                                {selectedId && sendErrors[selectedId] && <p role="alert" className="px-5 py-3 text-[13px]">{sendErrors[selectedId]}</p>}
                                 {/* Input */}
                                 <div className="BlackGradient ContentCardShadow rounded-b-[35px] sm:rounded-bl-none sm:rounded-br-[35px] px-[20px] sm:px-[40px] py-[16px] flex-shrink-0">
                                     <div className="BlackWithLightGradient ContentCardShadow rounded-[12px] flex gap-[15px] px-[16px] sm:px-[22px] py-[12px] items-center">
-                                        <input
-                                            type="text"
+                                        <textarea
+                                            rows={2}
+                                            maxLength={5000}
+                                            aria-label="Message"
+                                            disabled={!selectedConvo || isSending || messagesLoading || !!messagesError}
                                             value={newMessage}
-                                            onChange={e => setNewMessage(e.target.value)}
-                                            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                                            onChange={e => { if (selectedId) saveDraft(selectedId, e.target.value); }}
+                                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void sendMessage(); } }}
                                             placeholder="Write a message..."
                                             className="w-full focus:outline-none text-[14px] sm:text-[15px] font-light bg-transparent placeholder:opacity-30"
                                         />
                                         <div className="flex gap-[12px] items-center flex-shrink-0">
-                                            <div className="hidden sm:flex gap-[12px]">
-                                                <div className="w-[18px] opacity-40 hover:opacity-80 hover:cursor-pointer">
-                                                    <Image src="/Attachment Icon.png" alt="Attach" layout="responsive" width={0} height={0} />
-                                                </div>
-                                                <div className="w-[18px] opacity-40 hover:opacity-80 hover:cursor-pointer">
-                                                    <Image src="/Microphone Icon.png" alt="Mic" layout="responsive" width={0} height={0} />
-                                                </div>
-                                            </div>
-                                            <button onClick={sendMessage} disabled={isSending} className="w-[22px] sm:w-[25px] hover:opacity-70 disabled:opacity-30">
+                                            <button aria-label="Send message" onClick={sendMessage} disabled={isSending || !newMessage.trim() || !selectedConvo || messagesLoading || !!messagesError} className="w-[22px] sm:w-[25px] hover:opacity-70 disabled:opacity-30">
                                                 <Image src="/Send Icon.png" alt="Send" layout="responsive" width={0} height={0} />
                                             </button>
                                         </div>
                                     </div>
+                                    <p className="text-[11px] opacity-50 mt-2">Enter to send · Shift+Enter for a new line · Drafts saved in this tab</p>
                                 </div>
                             </div>
 

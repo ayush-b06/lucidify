@@ -3,10 +3,10 @@
 import Image from 'next/image';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getAuth, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithPopup, getRedirectResult } from "firebase/auth";
-import { auth, db } from '../firebaseConfig';
+import { GoogleAuthProvider, createUserWithEmailAndPassword, signInWithPopup, onAuthStateChanged } from "firebase/auth";
+import { auth } from '../firebaseConfig';
 import Link from 'next/link';
-import { addDoc, collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { authErrorMessage } from '@/utils/authErrors';
 import { useTheme } from '@/context/themeContext';
 
 const SIGNUPHeroSection = () => {
@@ -17,111 +17,48 @@ const SIGNUPHeroSection = () => {
   const [password2, setPassword2] = useState<string>("");
   const [error, setError] = useState<string | string[] | null>(null);
   const [step, setStep] = useState<number>(1);
-  const [isEmailTaken, setIsEmailTaken] = useState<string | null>(null);  // Track email existence
+  const [submitting, setSubmitting] = useState(false);
 
-  
-  const handleAuthRedirect = async (user: any) => {
-    const userRef = doc(db, "users", user.uid);
-    const docSnap = await getDoc(userRef);
+  useEffect(() => onAuthStateChanged(auth, user => {
+    if (user) router.replace("/dashboard");
+  }), [router]);
 
-    if (docSnap.exists()) {
-      router.push("/dashboard");
-    } else {
-      // Store email & uid in sessionStorage
-      sessionStorage.setItem("signupEmail", user.email);
-      sessionStorage.setItem("signupUid", user.uid);
-      router.push("/signup/get-started");
-    }
-  };
+  useEffect(() => { setTheme('light'); }, [setTheme]);
 
-  // Handle Google Sign-up with redirect
-  // Google Sign-Up
-
-  // Google Sign-Up
   const handleGoogleSignUp = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
     try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-
-      if (result.user) {
-        const user = result.user;
-        const userRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(userRef);
-
-        if (docSnap.exists()) {
-          router.push("/dashboard");
-        } else {
-          sessionStorage.setItem("signupEmail", user.email || "");
-          sessionStorage.setItem("signupUid", user.uid);
-          router.push("/signup/get-started");
-        }
-      }
+      await signInWithPopup(auth, new GoogleAuthProvider());
     } catch (error) {
-      console.error("Google Sign-In Error:", error);
+      setError(authErrorMessage(error));
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  
-  const isValidEmail = (email: string) => {
-    return email.includes("@");
-  };
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
-  // Email/Password Sign-Up
   const handleEmailSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (submitting) return;
     setError(null);
-
-    const errorMessages: string[] = [];
-    if (password.length < 8) errorMessages.push("Password must be at least 8 characters.");
-    if (!/\d/.test(password)) errorMessages.push("Password must include at least one number.");
-    if (errorMessages.length > 0) {
-      setError(errorMessages);
-      return;
-    }
-
+    const errors: string[] = [];
+    if (!isValidEmail(email)) errors.push("Enter a valid email address.");
+    if (password.length < 8) errors.push("Password must be at least 8 characters.");
+    if (!/\d/.test(password)) errors.push("Password must include at least one number.");
+    if (password !== password2) errors.push("Passwords must match.");
+    if (errors.length) { setError(errors); return; }
+    setSubmitting(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      // Check Firestore
-      const userRef = doc(db, "users", user.uid);
-      const docSnap = await getDoc(userRef);
-
-      if (docSnap.exists()) {
-        router.push("/dashboard");
-      } else {
-        // Store email & uid in sessionStorage for get-started page
-        sessionStorage.setItem("signupEmail", user.email || "");
-        sessionStorage.setItem("signupUid", user.uid);
-        router.push("/signup/get-started");
-      }
-    } catch (error: any) {
-      setError(["Sign-up failed. Please try again."]);
-      console.error(error);
+      await createUserWithEmailAndPassword(auth, email.trim(), password);
+    } catch (error) {
+      setError(authErrorMessage(error));
+    } finally {
+      setSubmitting(false);
     }
   };
-
-
-
-  // Force light mode on this page
-  useEffect(() => {
-    setTheme('light');
-  }, []);
-
-  // Handle the result of Google redirect sign-up
-  useEffect(() => {
-    const fetchRedirectResult = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result) {
-          router.push("/dashboard");
-        }
-      } catch (error) {
-        console.error("Google Redirect Error:", error);
-      }
-    };
-    fetchRedirectResult();
-  }, [router]);
 
   // Move to the next step with animation
   const handleContinue = () => {
@@ -139,34 +76,6 @@ const SIGNUPHeroSection = () => {
       }
     }, 0);  // Small delay to ensure animation triggers smoothly
   };
-
-  // this function would be able to check if the email exists alr, however, the async and await messes up the transition to step 2. i'm still not sure why. 12/19/2024
-  // const handleContinue = async () => {
-  //   // Check if the email already exists in Firestore
-  //   const usersRef = collection(db, "users");
-  //   const emailQuery = query(usersRef, where("email", "==", email)); // Query Firestore for email
-
-  //   const querySnapshot = await getDocs(emailQuery);
-  //   console.log("lol");
-
-  //   if (!querySnapshot.empty) {
-  //     setIsEmailTaken(true); // Set to true if the email already exists
-  //     console.log("LMAO");
-  //   } else {
-  //     setIsEmailTaken(false); // Reset to false if the email is available
-  //     setTimeout(() => {
-
-  //       setStep(2);  // Switch to step 2
-  //       console.log(step);
-
-  //       const section2 = document.getElementById("SignUpSection2");
-  //       if (section2) {
-  //         section2.style.transform = "translateX(0)";
-  //         section2.style.opacity = "1";
-  //       }
-  //     }, 5000)
-  //   }
-  // };
 
   // Move to the previous step with animation
   const handleBack = () => {
@@ -189,7 +98,7 @@ const SIGNUPHeroSection = () => {
   return (
     <div className="relative flex justify-center items-center min-h-screen BackgroundGradient FullPageBg overflow-clip px-4">
       {/* Left Decorative Image */}
-      <div className="hidden lg:block w-[18%] absolute left-[10%] top-[27%] my-auto z-10">
+      <div className="pointer-events-none hidden lg:block w-[18%] absolute left-[10%] top-[27%] my-auto z-10">
         <Image
           src="/3D Astronaut.png"
           alt="Left Decorative Image"
@@ -200,7 +109,7 @@ const SIGNUPHeroSection = () => {
       </div>
 
       {/* Right Decorative Image */}
-      <div className="hidden lg:block -right-[17%] bottom-[57%] w-[50%] absolute">
+      <div className="pointer-events-none hidden lg:block -right-[17%] bottom-[57%] w-[50%] absolute">
         <Image
           src="/3D Earth.png"
           alt="Right Decorative Image"
@@ -238,6 +147,7 @@ const SIGNUPHeroSection = () => {
               {/* Google Sign-Up Button */}
               <button
                 onClick={handleGoogleSignUp}
+                disabled={submitting}
                 className="text-white w-full bg-[rgba(0,0,0,1)] hover:bg-[rgba(0,0,0,0.80)] py-2 rounded-lg flex items-center justify-center ThreeD mb-4"
               >
                 <div className="w-[15px] mr-[10px]">
@@ -257,6 +167,8 @@ const SIGNUPHeroSection = () => {
                 <p className="text-gray-500 mx-[10px]">or</p>
                 <div className="h-[1px] bg-gray-300 w-[100%]"></div>
               </div>
+
+              {error && <p role="alert" className="AuthError mb-4">{Array.isArray(error) ? error.join(" ") : error}</p>}
 
               {/* Email Input and Continue Button */}
               <div className="flex flex-col items-start">
@@ -322,20 +234,21 @@ const SIGNUPHeroSection = () => {
                 </div>
 
                 {error && (
-                  <div className="flex flex-col gap-2 mt-4 items-start">
+                  <div role="alert" className="AuthError flex flex-col gap-2 mt-4 items-start">
                     {Array.isArray(error)
                       ? error.map((err, index) => (
-                        <p key={index} className="text-red-500 text-[14px]">
+                        <p key={index} className="AuthError text-[14px]">
                           {err}
                         </p>
                       ))
-                      : <p className="text-red-500 text-[14px]">{error}</p>}
+                      : <p className="AuthError text-[14px]">{error}</p>}
                   </div>
                 )}
 
 
                 <div className="flex justify-between mt-[30px]">
                   <button
+                    type="button"
                     onClick={handleBack}
                     className={`w-[28%] text-black py-[10px] rounded-lg bg-transparent flex items-center justify-center gap-[4px] opacity-60 hover:opacity-100 GoHomeText`}>
                     <div className="w-[10px] GoHomeArrow">
@@ -351,8 +264,8 @@ const SIGNUPHeroSection = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={!password || password !== password2}
-                    className={`w-[70%] ${(!password || password !== password2) ? "text-[rgba(0,0,0,0.5)]" : "text-white"} py-[10px] rounded-lg bg-${(!password || password !== password2) ? "[rgba(114,92,247,0.5)]" : "[#725CF7]"} shadow-lg shadow-indigo-300 ${(password && password === password2) && "hover:bg-[#5D3AEA]"}`}
+                    disabled={submitting || !password || password !== password2}
+                    className={`w-[70%] ${(!password || password !== password2) ? "text-[rgba(0,0,0,0.5)]" : "text-white"} py-[10px] rounded-lg ${(!password || password !== password2) ? "bg-[rgba(114,92,247,0.5)]" : "bg-[#725CF7]"} shadow-lg shadow-indigo-300 ${(password && password === password2) && "hover:bg-[#5D3AEA]"}`}
                   >
                     Complete Sign Up
                   </button>

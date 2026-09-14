@@ -10,8 +10,8 @@ import {
     signInWithEmailAndPassword,
     onAuthStateChanged,
 } from "firebase/auth";
-import { auth, db } from '../firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
+import { auth } from '../firebaseConfig';
+import { authErrorMessage } from '@/utils/authErrors';
 import Link from 'next/link';
 import { useTheme } from '@/context/themeContext';
 
@@ -25,59 +25,53 @@ const LOGINHeroSection = () => {
     // Force light mode on this page
     useEffect(() => {
         setTheme('light');
-    }, []);
+    }, [setTheme]);
 
     // Redirect to dashboard if already logged in
     useEffect(() => {
         const auth = getAuth();
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             if (user) {
-                router.push("/dashboard");
+                router.replace("/dashboard");
             }
         });
 
         return () => unsubscribe();
     }, [router]);
 
-    // Function to handle Google sign-in with popup
+    const [submitting, setSubmitting] = useState(false);
+
     const handleGoogleSignIn = async () => {
+        if (submitting) return;
+        setSubmitting(true);
+        setError(null);
         try {
-            const provider = new GoogleAuthProvider();
-            const result = await signInWithPopup(auth, provider);
-            if (result.user) {
-                const userRef = doc(db, "users", result.user.uid);
-                const docSnap = await getDoc(userRef);
-                if (docSnap.exists()) {
-                    router.push("/dashboard");
-                } else {
-                    sessionStorage.setItem("signupEmail", result.user.email || "");
-                    sessionStorage.setItem("signupUid", result.user.uid);
-                    router.push("/signup/get-started");
-                }
-            }
+            await signInWithPopup(auth, new GoogleAuthProvider());
         } catch (error) {
-            console.error("Google Sign-In Error:", error);
+            setError(authErrorMessage(error));
+        } finally {
+            setSubmitting(false);
         }
     };
 
-    // Function to handle email and password sign-in
     const handleEmailPasswordSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        if (submitting) return;
+        setSubmitting(true);
+        setError(null);
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            if (userCredential.user) {
-                router.push("/dashboard");
-            }
+            await signInWithEmailAndPassword(auth, email.trim(), password);
         } catch (error) {
-            setError("Invalid email or password. Please try again.");
-            console.error("Email/Password Sign-In Error:", error);
+            setError(authErrorMessage(error));
+        } finally {
+            setSubmitting(false);
         }
     };
 
     return (
         <div className="relative flex justify-center items-center min-h-screen BackgroundGradient FullPageBg px-4">
             {/* Left Decorative Image */}
-            <div className="hidden lg:block w-[25%] absolute left-[170px] my-auto z-0">
+            <div className="pointer-events-none hidden lg:block w-[25%] absolute left-[170px] my-auto z-0">
                 <Image
                     src="/3D Big Hero 5.png"
                     alt="Left Decorative Image"
@@ -88,7 +82,7 @@ const LOGINHeroSection = () => {
             </div>
 
             {/* Right Decorative Image */}
-            <div className="hidden lg:block w-[41%] absolute right-[0px] bottom-[0px] z-20">
+            <div className="pointer-events-none hidden lg:block w-[41%] absolute right-[0px] bottom-[0px] z-20">
                 <Image
                     src="/3D Big Hero 6.png"
                     alt="Right Decorative Image"
@@ -147,7 +141,8 @@ const LOGINHeroSection = () => {
                 {/* Google Sign-In Button */}
                 <button
                     onClick={handleGoogleSignIn}
-                    className="w-full bg-[rgba(0,0,0,1)] hover:bg-[rgba(0,0,0,0.80)] py-2 rounded-lg flex items-center justify-center ThreeD"
+                    disabled={submitting}
+                    className="text-white w-full bg-[rgba(0,0,0,1)] hover:bg-[rgba(0,0,0,0.80)] py-2 rounded-lg flex items-center justify-center ThreeD"
                 >
                     <div className="w-[15px] mr-[10px]">
                         <Image
@@ -193,14 +188,14 @@ const LOGINHeroSection = () => {
                         />
                     </div>
 
-                    {error && <p className="text-red-500 mb-4">{error}</p>}
+                    {error && <p role="alert" className="AuthError mb-4">{error}</p>}
 
                     <button
                         type="submit"
-                        disabled={!email || !password}
+                        disabled={submitting || !email.trim() || !password}
                         className={`w-full py-2 rounded-lg mb-[40px] shadow-lg shadow-indigo-300 ${!email || !password ? 'bg-[rgba(114,92,247,0.5)] text-[rgba(0,0,0,0.5)]' : 'bg-[#725CF7] text-white hover:bg-[#5D3AEA]'}`}
                     >
-                        Sign In
+                        {submitting ? "Signing in…" : "Sign In"}
                     </button>
                 </form>
 

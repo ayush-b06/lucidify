@@ -9,7 +9,7 @@ const FloatingThemeToggle = () => {
     const isDark = theme === 'dark';
 
     // Dashboard has its own inline toggle in the top bar
-    if (pathname?.startsWith('/dashboard')) return null;
+    if (pathname?.startsWith('/dashboard') || pathname === '/signup/get-started') return null;
 
     // Button appearance matches the mode you're switching TO:
     // dark mode → shows "LIGHT" → white button

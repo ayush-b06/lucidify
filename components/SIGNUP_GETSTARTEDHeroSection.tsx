@@ -1,12 +1,12 @@
 "use client"
 
 import Image from 'next/image';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { getAuth, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithPopup, getRedirectResult, onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from '../firebaseConfig';
 import Link from 'next/link';
-import { addDoc, collection, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import axios from "axios";
 import { useTheme } from '@/context/themeContext';
 
@@ -46,11 +46,14 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
   // Force light mode on this page
   useEffect(() => {
     setTheme('light');
-  }, []);
+  }, [setTheme]);
   const [firstName, setFirstName] = useState<string>("");
   const [bio, setBio] = useState<string>("");
-  const [email, setEmail] = useState<string | null>(null);
-  const [uid, setUid] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [authAttempt, setAuthAttempt] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const saveInFlight = useRef(false);
   const [lastName, setLastName] = useState<string>("");
   const [companyName, setCompanyName] = useState<string>("");
   const [companyURL, setCompanyURL] = useState<string>("");
@@ -134,7 +137,7 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
     { code: "WI", name: "Wisconsin" },
     { code: "WY", name: "Wyoming" }
   ];
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
   const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     // unused — state/region selection not currently implemented
   };
@@ -245,7 +248,7 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
       setSelectedServices([...selectedServices, service]);
     }
   };
-  console.log(selectedServices)
+
 
   // Function for handling hover state
   const handleMouseEnter = (service: string) => setHoveredService(service);
@@ -278,37 +281,31 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
     });
   }, []);
 
-  // Redirect if the user is not authenticated or hasn't just signed up
+  // Firebase owns the identity, including after a refresh or in a new tab.
   useEffect(() => {
-    const checkAuth = async () => {
-      onAuthStateChanged(auth, async (user) => {
-        if (!user) {
-          router.push("/signup"); // Redirect if no user is logged in
-        } else {
-          const userRef = doc(db, "users", user.uid);
-          const userData = (await getDoc(userRef)).data();
-
-          if (userData?.setUp === true) {
-            router.push("/dashboard"); // Redirect to dashboard if setup is complete
-          }
+    let generation = 0;
+    const unsubscribe = onAuthStateChanged(auth, async user => {
+      const request = ++generation;
+      setReady(false);
+      setChecking(true);
+      setError(null);
+      if (!user) { router.replace("/signup"); return; }
+      try {
+        const snapshot = await getDoc(doc(db, "users", user.uid));
+        if (request !== generation) return;
+        if (snapshot.data()?.setUp === true) {
+          router.replace("/dashboard");
+          return;
         }
-      });
-    };
-
-    checkAuth();
-  }, [router]);
-
-  useEffect(() => {
-    const storedEmail = sessionStorage.getItem("signupEmail");
-    const storedUid = sessionStorage.getItem("signupUid");
-
-    if (!storedEmail || !storedUid) {
-      router.push("/signup"); // redirect if no auth info
-    } else {
-      setEmail(storedEmail); // store in state if needed
-      setUid(storedUid);
-    }
-  }, [router]);
+        setReady(true);
+      } catch {
+        if (request === generation) setError("We couldn’t load your profile. Please try again.");
+      } finally {
+        if (request === generation) setChecking(false);
+      }
+    });
+    return () => { generation++; unsubscribe(); };
+  }, [router, authAttempt]);
 
   // var section1Visited = true;
   // var section2Visited = false;
@@ -462,76 +459,64 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
   //   console.log(`Updated device width: ${deviceWidth}`);
   // });
   const handleSubmit = async () => {
-    if (!uid || !email) return; // safety check
-
-    const userRef = doc(db, "users", uid);
-
-    // Create the user profile doc
-    await setDoc(userRef, {
-      email: email,
-      firstName,
-      lastName,
-      bio: bio.trim() || "Hey! I'm a Lucidify Member 👋",
-      companyName,
-      companyURL,
-      companySize,
-      companyRole,
-      selectedServices,
-      customService,
-      idealOutcome,
-      selectedChallenges,
-      customChallenge,
-      selectedAvatar,
-      setUp: true,
-      createdAt: new Date(),
-    });
-
-    // --- Conversations Setup ---
-    const conversationsRef = collection(db, "users", uid, "conversations");
-
-    // Create the Lucidify pinned conversation
-    const conversationDocRef = await addDoc(conversationsRef, {
-      title: "Lucidify",
-      isPinned: true,
-      lastMessage: "Welcome to Lucidify! We're excited to help you get started with your project.",
-      lastMessageSender: "Lucidify",
-      timestamp: new Date(),
-      unreadCounts: {
-        [uid]: 1,       // The new user's unread count
-        Lucidify: 0          // Admin's unread count
-      },
-    });
-
-    // Create the "messages" subcollection under this conversation
-    const messagesRef = collection(
-      db,
-      "users",
-      uid,
-      "conversations",
-      conversationDocRef.id,
-      "messages"
-    );
-
-    await addDoc(messagesRef, {
-      text: "Welcome to Lucidify! We're excited to help you get started with your project.",
-      sender: "Lucidify",
-      timestamp: new Date(),
-      isRead: false,
-    });
-
-    // --- Cleanup sessionStorage ---
-    sessionStorage.removeItem("signupEmail");
-    sessionStorage.removeItem("signupUid");
-
-    // Redirect to dashboard
-    router.push("/dashboard");
+    if (saveInFlight.current || !ready) return;
+    const user = auth.currentUser;
+    if (!user) { router.replace("/login"); return; }
+    if (!firstName.trim() || !selectedAvatar) {
+      setError("Enter your first name and choose an avatar before finishing setup.");
+      return;
+    }
+    saveInFlight.current = true;
+    setSaving(true);
+    setError(null);
+    try {
+      const userRef = doc(db, "users", user.uid);
+      const snapshot = await getDoc(userRef);
+      if (snapshot.data()?.setUp === true) { router.replace("/dashboard"); return; }
+      // Commit everything together so a failed welcome message cannot leave
+      // an apparently completed profile. Stable IDs make retries safe.
+      const batch = writeBatch(db);
+      const timestamp = serverTimestamp();
+      const welcome = "Welcome to Lucidify! We're excited to help you get started with your project.";
+      batch.set(userRef, {
+        email: user.email || "",
+        firstName: firstName.trim(), lastName: lastName.trim(),
+        bio: bio.trim() || "Hey! I'm a Lucidify Member 👋",
+        companyName, companyURL, companySize, companyRole,
+        selectedServices, customService, idealOutcome,
+        selectedChallenges, customChallenge, selectedAvatar,
+        setUp: true, createdAt: snapshot.data()?.createdAt ?? timestamp,
+      }, { merge: true });
+      const conversationRef = doc(db, "users", user.uid, "conversations", "lucidify");
+      batch.set(conversationRef, {
+        title: "Lucidify", isPinned: true, lastMessage: welcome,
+        lastMessageSender: "Lucidify", timestamp,
+        unreadCounts: { [user.uid]: 1, Lucidify: 0 },
+      });
+      batch.set(doc(conversationRef, "messages", "welcome"), {
+        text: welcome, sender: "Lucidify", timestamp, isRead: false,
+      });
+      await batch.commit();
+      router.replace("/dashboard");
+    } catch {
+      setError("We couldn’t save your setup. Your answers are still here — please try again.");
+    } finally {
+      saveInFlight.current = false;
+      setSaving(false);
+    }
   };
 
 
   return (
-    <div className="relative flex justify-center items-center min-h-screen BackgroundGradient FullPageBg overflow-hidden">
+    <div className="relative flex justify-center items-center min-h-screen BackgroundGradient FullPageBg SignupSetup overflow-hidden">
+      {!ready && <div className="absolute inset-0 z-50 bg-[#251470] flex flex-col items-center justify-center gap-4 text-white p-6">
+        {checking ? <p role="status">Loading your profile…</p> : <>
+          <p role="alert">{error}</p>
+          <button onClick={() => setAuthAttempt(value => value + 1)} className="rounded-lg border border-white px-5 py-3">Try again</button>
+        </>}
+      </div>}
       {/* Left Decorative Image */}
-      <div className="w-[25%] absolute left-[7%]  my-auto z-10" id={"SignUpSection1Pic1"}>
+      <div className="pointer-events-none w-[25%] absolute left-[7%]  my-auto z-10" id={"SignUpSection1Pic1"}>
         <Image
           src="/3D Big Saly.png"
           alt="Left Decorative Image"
@@ -542,7 +527,7 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
       </div>
 
       {/* Right Decorative Image */}
-      <div className="right-[4%] bottom-0 w-[25%] absolute translate-x-[1980px]" id={"SignUpSection2Pic1"}>
+      <div className="pointer-events-none right-[4%] bottom-0 w-[25%] absolute translate-x-[1980px]" id={"SignUpSection2Pic1"}>
         <Image
           src="/3D Big Henry.png"
           alt="Right Decorative Image"
@@ -552,7 +537,7 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
         />
       </div>
 
-      <div className="absolute -left-[25%] translate-x-[1980px] -bottom-[100px] w-[50%]" id={"SignUpSection1Pic2"}>
+      <div className="pointer-events-none absolute -left-[25%] translate-x-[1980px] -bottom-[100px] w-[50%]" id={"SignUpSection1Pic2"}>
         <Image
           src="/3D Geometry.png"
           alt="Rocket Decorative Image"
@@ -594,7 +579,7 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
 
           <button className={`ButtonLessBoxShadow w-[180px] button h-[50px] rounded-[40px] border-solid border-l-[1px] border-[#a5b4fcc4] ${firstName ? "opacity-100" : "opacity-30 pointer-events-none"} ${companyName && companyURL && companySize && companyRole && "opacity-100 ButtonDone"}`}
             onClick={() => handleContinue(2)}  // Trigger transition
-            disabled={!firstName}>
+            disabled={!firstName.trim()}>
             <div className="button__content rounded-[40px]">
               <div className="button__icon">
               </div>
@@ -614,7 +599,7 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
 
           <button className={`ButtonLessBoxShadow w-[190px] button h-[50px] rounded-[40px] border-solid border-l-[1px] border-[#a5b4fcc4] ${firstName && section3Visited ? "opacity-100" : "opacity-30 pointer-events-none"} ${selectedAvatar && "opacity-100 ButtonDone"}`}
             onClick={() => handleContinue(4)}  // Trigger transition
-            disabled={selectedServices.length === 0 || selectedChallenges.length === 0 || !idealOutcome}>
+            disabled={!firstName.trim() || !section3Visited}>
             <div className="button__content rounded-[40px]">
               <div className="button__icon">
               </div>
@@ -710,13 +695,13 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
             {/* <button
               className={`w-full ${firstName ? "text-white" : "text-[rgba(0,0,0,0.5)]"} py-2 mt-4 rounded-lg bg-${firstName ? "[#725CF7]" : "[rgba(114,92,247,0.5)]"} shadow-lg shadow-indigo-300 ${firstName && "hover:bg-[#5D3AEA]"}`}
               onClick={() => handleContinue(2)}  // Trigger transition
-              disabled={!firstName}
+              disabled={!firstName.trim()}
             >
               Continue
             </button> */}
             <button className={`w-full button h-[50px] rounded-[40px] ${firstName ? "opacity-100" : "opacity-30 pointer-events-none"} mt-[26px]`}
               onClick={() => handleContinue(2)}  // Trigger transition
-              disabled={!firstName}>
+              disabled={!firstName.trim()}>
               <div className="button__content rounded-[40px]">
                 <div className="button__icon">
                 </div>
@@ -1100,6 +1085,7 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
 
           <div className="flex flex-col gap-[20px]">
 
+            {error && ready && <p role="alert" className="AuthError">{error}</p>}
             {/* Choosing Avatar */}
             <div className="flex flex-col items-start gap-[10px] w-full">
               <h3 className="text-black text-[14px]">
@@ -1148,22 +1134,22 @@ const SIGNUP_GETTINGSTARTEDHeroSection = () => {
                 </button>
                 <button className={`w-[25%] button h-[50px] rounded-[40px] border-solid border-l-[1px] border-[#a5b4fcc4] ${selectedAvatar ? "opacity-100" : "opacity-30 pointer-events-none"}`}
                   onClick={() => handleSubmit()}  // Trigger transition
-                  disabled={!selectedAvatar}>
+                  disabled={!selectedAvatar || saving || !ready}>
                   <div className="button__content rounded-[40px]">
-                    <p className={`button__text ${selectedAvatar ? "text-black" : "text-[rgba(0,0,0,0.6)]"} `}>Finish Setup</p>
+                    <p className={`button__text ${selectedAvatar ? "text-black" : "text-[rgba(0,0,0,0.6)]"} `}>{saving ? "Saving…" : "Finish Setup"}</p>
                   </div>
                 </button>
                 {/* <button
                   className={`w-[35%] hover:-translate-y-[3px] hover:-translate-x-[2px] hover:scale-[101%] hover:shadow-xl hover:shadow-indigo-300 text-white py-2 mt-4 rounded-lg bg-[rgba(0,0,0,0.6)] shadow-lg shadow-indigo-300 "hover:bg-[#5D3AEA]"`}
                   onClick={() => handleContinue(3)}  // Trigger transition
-                  disabled={!firstName}
+                  disabled={!firstName.trim()}
                 >
                   Back
                 </button> */}
                 {/* <button
                   className={`w-[42%] hover:-translate-y-[3px] hover:translate-x-[2px] hover:scale-[101%] hover:shadow-xl hover:shadow-indigo-300 ${firstName ? "text-white" : "text-[rgba(0,0,0,0.5)]"} py-2 mt-4 rounded-lg bg-${firstName ? "[#725CF7]" : "[rgba(114,92,247,0.5)]"} shadow-lg shadow-indigo-300 ${firstName && "hover:bg-[#5D3AEA]"}`}
                   onClick={() => handleContinue(3)}  // Trigger transition
-                  disabled={!firstName}
+                  disabled={!firstName.trim()}
                 >
                   Continue
                 </button> */}

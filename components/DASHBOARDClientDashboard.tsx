@@ -1,39 +1,19 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { getAuth } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
-import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/authContext';
+import { useClientProjects } from '@/hooks/useClientProjects';
+import { projectState, projectProgress, projectHref, projectNextStep, projectStateLabels } from '@/utils/projectWorkflow';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import DashboardClientSideNav from './DashboardClientSideNav';
 import Image from 'next/image';
 import Link from 'next/link';
 import DashboardTopBar from './DashboardTopBar';
-import { useTheme } from '@/context/themeContext';
-
-interface Project {
-  uid: string;
-  projectName: string;
-  progress?: string;
-  approval?: string;
-  dueDate?: string;
-  recentActivity?: string;
-  dateCreated?: string;
-  paymentPlan?: number;
-  weeksPaid?: number;
-  status?: number;
-  logoAttachment?: string | null;
-}
 
 const DASHBOARDClientDashboard = () => {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  const { projects, loading: dataLoading, error, retry } = useClientProjects();
   const [firstName, setFirstName] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const auth = getAuth();
-  const router = useRouter();
-  const { setTheme } = useTheme();
-
-  useEffect(() => { setTheme('light'); }, []);
+  const { user } = useAuth();
 
   const getFormattedDate = () => {
     const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -43,48 +23,18 @@ const DASHBOARDClientDashboard = () => {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
-      const user = auth.currentUser;
-      if (!user) { router.push('/login'); return; }
+    if (!user) return;
+    let active = true;
+    getDoc(doc(db, 'users', user.uid)).then(snapshot => {
+      if (active && snapshot.exists()) setFirstName(snapshot.data().firstName || null);
+    }).catch(console.error);
+    return () => { active = false; };
+  }, [user]);
 
-      setUserId(user.uid);
-
-      try {
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) setFirstName(userDoc.data().firstName || null);
-
-        const projectsSnap = await getDocs(collection(db, 'users', user.uid, 'projects'));
-        const fetched: Project[] = [];
-        projectsSnap.forEach((pDoc) => {
-          const p = pDoc.data();
-          fetched.push({
-            uid: pDoc.id,
-            projectName: p.projectName || 'Unnamed Project',
-            progress: p.progress || '0',
-            approval: p.approval || 'Pending',
-            dueDate: p.dueDate || null,
-            recentActivity: p.recentActivity || null,
-            dateCreated: p.dateCreated || null,
-            paymentPlan: p.paymentPlan || 0,
-            weeksPaid: p.weeksPaid || 0,
-            status: p.status || 1,
-            logoAttachment: p.logoAttachment || null,
-          });
-        });
-        setProjects(fetched);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setDataLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [auth, router]);
-
-  const activeProject = projects.find(p => p.approval === 'Approved') || projects[0] || null;
-  const activeCount = projects.filter(p => p.approval === 'Approved').length;
-  const pendingCount = projects.filter(p => p.approval === 'Pending').length;
+  const activeProject = projects.find(p => projectState(p) === 'approved') || projects[0] || null;
+  const activeCount = projects.filter(p => projectState(p) === 'approved').length;
+  const pendingCount = projects.filter(p => projectState(p) === 'pending').length;
+  const actionProjects = projects.filter(p => ['setup', 'declined'].includes(projectState(p)));
 
   const getApprovalStyle = (approval?: string) => {
     if (approval === 'Approved') return 'text-green-400 bg-green-400/10 px-[10px] py-[3px] rounded-full text-[12px]';
@@ -108,12 +58,22 @@ const DASHBOARDClientDashboard = () => {
             <p className="text-[14px] font-light opacity-60">Today is {getFormattedDate()}</p>
           </div>
 
+          {error && <div role="alert" className="BlackGradient rounded-xl p-5 mb-5"><p>{error}</p><button onClick={retry} className="underline mt-2">Try again</button></div>}
+          {!dataLoading && !error && actionProjects.length > 0 && <section aria-label="Your next steps" className="BlackGradient ContentCardShadow rounded-[24px] p-6 mb-6">
+            <h2 className="text-[17px] font-semibold mb-3">Your next steps</h2>
+            {actionProjects.map(project => <div key={project.uid} className="flex flex-wrap items-center justify-between gap-3 py-3 border-t border-white/10">
+              <div><p className="font-medium">{project.projectName}</p><p className="text-[13px] opacity-70 mt-1">{projectNextStep(project)}</p></div>
+              <Link className="PopupAttentionGradient rounded-xl px-4 py-2 text-[13px]" href={projectState(project) === 'setup' ? projectHref(project) : `/dashboard/messages?projectId=${encodeURIComponent(project.uid)}`}>
+                {projectState(project) === 'setup' ? 'Continue setup' : 'Discuss project'}
+              </Link>
+            </div>)}
+          </section>}
           {/* Stat Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-[15px] mb-[30px]">
             {[
-              { label: 'Total Projects', value: dataLoading ? '—' : projects.length, icon: '📁', color: '#725CF7' },
-              { label: 'Active', value: dataLoading ? '—' : activeCount, icon: '✅', color: '#22c55e' },
-              { label: 'Pending Review', value: dataLoading ? '—' : pendingCount, icon: '⏳', color: '#f59e0b' },
+              { label: 'Total Projects', value: dataLoading || error ? '—' : projects.length, icon: '📁', color: '#725CF7' },
+              { label: 'Active', value: dataLoading || error ? '—' : activeCount, icon: '✅', color: '#22c55e' },
+              { label: 'Pending Review', value: dataLoading || error ? '—' : pendingCount, icon: '⏳', color: '#f59e0b' },
             ].map((stat) => (
               <div key={stat.label} className="DashboardPurpleCard ContentCardShadow rounded-[20px] px-[25px] py-[22px] flex flex-col gap-[10px]">
                 <div className="flex items-center justify-between">
@@ -129,7 +89,7 @@ const DASHBOARDClientDashboard = () => {
             {/* Active Project Spotlight */}
             <div className="BlackGradient ContentCardShadow rounded-[24px] overflow-hidden flex flex-col">
               <div className="flex items-center justify-between px-[28px] py-[20px] border-b border-white/10">
-                <h2 className="text-[17px] font-semibold">Active Project</h2>
+                <h2 className="text-[17px] font-semibold">Project Overview</h2>
                 {projects.length > 0 && (
                   <Link href="/dashboard/projects" className="text-[12px] opacity-50 hover:opacity-100 flex items-center gap-[4px]">
                     All projects
@@ -138,7 +98,7 @@ const DASHBOARDClientDashboard = () => {
                 )}
               </div>
               <div className="flex-1 px-[28px] py-[24px]">
-                {dataLoading ? (
+                {error ? <p className="p-6 text-[14px]">Project information is unavailable.</p> : dataLoading ? (
                   <p className="opacity-40 font-light text-[14px]">Loading...</p>
                 ) : !activeProject ? (
                   <div className="flex flex-col items-center justify-center py-[30px] gap-[12px]">
@@ -159,7 +119,7 @@ const DASHBOARDClientDashboard = () => {
                       </div>
                       <div className="min-w-0">
                         <h3 className="text-[16px] font-semibold truncate">{activeProject.projectName}</h3>
-                        <span className={getApprovalStyle(activeProject.approval)}>{activeProject.approval || 'Pending'}</span>
+                        <span className={getApprovalStyle(activeProject.approval)}>{projectStateLabels[projectState(activeProject)]}</span>
                       </div>
                     </div>
 
@@ -167,13 +127,13 @@ const DASHBOARDClientDashboard = () => {
                     <div>
                       <div className="flex justify-between mb-[8px]">
                         <p className="text-[13px] font-light opacity-60">Overall Progress</p>
-                        <p className="text-[13px] font-semibold">{activeProject.progress || 0}%</p>
+                        <p className="text-[13px] font-semibold">{projectProgress(activeProject.progress)}%</p>
                       </div>
                       <div className="h-[7px] rounded-full bg-white/10">
                         <div
                           className="h-full rounded-full"
                           style={{
-                            width: `${Math.min(Number(activeProject.progress) || 0, 100)}%`,
+                            width: `${projectProgress(activeProject.progress)}%`,
                             background: 'linear-gradient(to right, #6265f0, #725CF7)'
                           }}
                         />
@@ -189,7 +149,7 @@ const DASHBOARDClientDashboard = () => {
                       <div className="BlackWithLightGradient rounded-[12px] px-[14px] py-[12px]">
                         <p className="text-[11px] opacity-40 mb-[3px]">Payments</p>
                         <p className="text-[13px] font-medium">
-                          {activeProject.weeksPaid || 0} / {activeProject.paymentPlan || '—'} wks
+                          {typeof activeProject.paymentPlan === 'number' ? `${activeProject.weeksPaid || 0} / ${activeProject.paymentPlan} wks` : activeProject.paymentPlan || 'Not set'}
                         </p>
                       </div>
                     </div>
@@ -202,10 +162,10 @@ const DASHBOARDClientDashboard = () => {
                     )}
 
                     <Link
-                      href={`/dashboard/projects/${activeProject.uid}?projectId=${activeProject.uid}&userId=${userId}`}
+                      href={projectHref(activeProject)}
                       className="PopupAttentionGradient PopupAttentionShadow text-[13px] font-medium px-[16px] py-[10px] rounded-[12px] text-center"
                     >
-                      View Project Details →
+                      {projectState(activeProject) === 'setup' ? 'Continue setup →' : 'View Project Details →'}
                     </Link>
                   </div>
                 )}
@@ -222,7 +182,7 @@ const DASHBOARDClientDashboard = () => {
                 </Link>
               </div>
               <div className="flex-1 flex flex-col">
-                {dataLoading ? (
+                {error ? <p className="p-6 text-[14px]">Project information is unavailable.</p> : dataLoading ? (
                   <div className="flex justify-center items-center py-[40px]">
                     <p className="opacity-40 font-light text-[14px]">Loading...</p>
                   </div>
@@ -234,7 +194,7 @@ const DASHBOARDClientDashboard = () => {
                   projects.map((project, i) => (
                     <Link
                       key={project.uid}
-                      href={`/dashboard/projects/${project.uid}?projectId=${project.uid}&userId=${userId}`}
+                      href={projectHref(project)}
                       className={`flex items-center gap-[14px] px-[28px] py-[16px] hover:bg-white/[0.03] ${i < projects.length - 1 ? 'border-b border-white/5' : ''}`}
                     >
                       <div className="w-[36px] h-[36px] rounded-[8px] BlackWithLightGradient ContentCardShadow flex items-center justify-center flex-shrink-0 overflow-hidden">
@@ -251,15 +211,15 @@ const DASHBOARDClientDashboard = () => {
                             <div
                               className="h-full rounded-full"
                               style={{
-                                width: `${Math.min(Number(project.progress) || 0, 100)}%`,
+                                width: `${projectProgress(project.progress)}%`,
                                 background: 'linear-gradient(to right, #6265f0, #725CF7)'
                               }}
                             />
                           </div>
-                          <p className="text-[11px] opacity-50 flex-shrink-0">{project.progress || 0}%</p>
+                          <p className="text-[11px] opacity-50 flex-shrink-0">{projectProgress(project.progress)}%</p>
                         </div>
                       </div>
-                      <span className={getApprovalStyle(project.approval)}>{project.approval || 'Pending'}</span>
+                      <span className={getApprovalStyle(project.approval)}>{projectStateLabels[projectState(project)]}</span>
                     </Link>
                   ))
                 )}

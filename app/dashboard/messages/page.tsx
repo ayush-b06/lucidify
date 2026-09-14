@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminDashboard from '@/components/DASHBOARDAdminMessages';
 import ClientDashboard from '@/components/DASHBOARDClientMessages';
@@ -37,7 +37,7 @@ const DashboardPage = () => {
   return user.email === 'ayush.bhujle@gmail.com' ? (
     <AdminDashboard />
   ) : (
-    <ClientDashboard />
+    <Suspense fallback={<p role="status">Loading messages...</p>}><ClientDashboard /></Suspense>
   );
 };
 

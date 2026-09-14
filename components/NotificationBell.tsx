@@ -98,6 +98,7 @@ const NotificationBell = () => {
     return (
         <div ref={popupRef} className="relative">
             <button
+                aria-label="Notifications"
                 onClick={() => setIsOpen(prev => !prev)}
                 className="flex w-[45px] h-[45px] sm:w-[55px] sm:h-[55px] items-center justify-center relative rounded-[100px] BlackGradient ContentCardShadow cursor-pointer"
             >
@@ -107,7 +108,7 @@ const NotificationBell = () => {
                     </div>
                 )}
                 <div className="w-[22px] sm:w-[25px]">
-                    <Image src={isLight ? "/Black Notification Bell Icon.png" : "/Notification Bell Icon.png"} alt="Notifications" layout="responsive" width={0} height={0} />
+                    <Image src={isLight ? "/Black Notification Bell Icon.png" : "/Notification Bell Icon.png"} alt="Notifications" width={64} height={64} style={{ width: "100%", height: "auto" }} sizes="150px" />
                 </div>
             </button>
 

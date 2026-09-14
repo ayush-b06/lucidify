@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import Link from 'next/link';
+import { projectState, projectStateLabels, projectNextStep } from '@/utils/projectWorkflow';
 import Image from 'next/image';
 import DashboardClientSideNav from './DashboardClientSideNav';
 import DashboardTopBar from './DashboardTopBar';
@@ -16,6 +17,8 @@ interface DASHBOARDClientProjectDetailsProps {
 
 interface ProjectDetails {
     projectName?: string;
+    approval?: string;
+    setupComplete?: boolean;
     dueDate?: string;
     dateCreated?: string;
     projectDescription?: string;
@@ -56,32 +59,28 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
     const [projectDetails, setProjectDetails] = useState<ProjectDetails | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const [attempt, setAttempt] = useState(0);
     const [paymentType, setPaymentType] = useState<'week' | 'full'>('week');
     const [designCount, setDesignCount] = useState(0);
     const [autoPayLoading, setAutoPayLoading] = useState(false);
 
     useEffect(() => {
-        const fetchProjectDetails = async () => {
-            if (!userId || !projectId) return;
-            try {
-                const projectDocRef = doc(db, 'users', userId, 'projects', projectId);
-                const projectDoc = await getDoc(projectDocRef);
-                if (projectDoc.exists()) {
-                    setProjectDetails(projectDoc.data() as ProjectDetails);
-                } else {
-                    setError('Project not found.');
-                }
-                const sectionSnap = await getDocs(collection(db, 'users', userId, 'projects', projectId, 'section web designs'));
-                const fullSnap = await getDocs(collection(db, 'users', userId, 'projects', projectId, 'full-page web designs'));
-                setDesignCount(sectionSnap.size + fullSnap.size);
-            } catch {
-                setError('Failed to fetch project details.');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchProjectDetails();
-    }, [userId, projectId]);
+        setLoading(true);
+        setError(null);
+        setProjectDetails(null);
+        if (!userId || !projectId) return;
+        let active = true;
+        const unsubscribe = onSnapshot(doc(db, 'users', userId, 'projects', projectId), snapshot => {
+            if (snapshot.exists()) { setProjectDetails(snapshot.data() as ProjectDetails); setError(null); }
+            else setError('Project not found.');
+            setLoading(false);
+        }, () => { setError('We couldn’t load your project. Please try again.'); setLoading(false); });
+        Promise.all([
+            getDocs(collection(db, 'users', userId, 'projects', projectId, 'section web designs')),
+            getDocs(collection(db, 'users', userId, 'projects', projectId, 'full-page web designs')),
+        ]).then(([sections, pages]) => { if (active) setDesignCount(sections.size + pages.size); }).catch(console.error);
+        return () => { active = false; unsubscribe(); };
+    }, [userId, projectId, attempt]);
 
     const {
         projectName, dueDate, dateCreated, projectDescription,
@@ -136,10 +135,45 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
         <div className="flex flex-col xl:flex-row h-screen DashboardBackgroundGradient overflow-hidden">
             <DashboardClientSideNav highlight="projects" />
             <div className="flex-1 flex items-center justify-center pt-[60px] xl:pt-0">
-                <p className="opacity-40 font-light text-[14px]">{error}</p>
+                <div role="alert"><p>{error}</p><button className="underline mt-3 mr-4" onClick={() => setAttempt(value => value + 1)}>Try again</button><Link className="underline" href="/dashboard/projects">Back to projects</Link></div>
             </div>
         </div>
     );
+
+    if (projectDetails && projectState(projectDetails) !== 'approved') {
+        const state = projectState(projectDetails);
+        const brief = [
+            ['Requested launch', projectDetails.dueDate],
+            ['Platform', projectDetails.platform],
+            ['Pages', Array.isArray(projectDetails.subpages) ? projectDetails.subpages.join(', ') : undefined],
+            ['Budget range', projectDetails.estimatedBudget],
+            ['Payment preference', projectDetails.paymentPlan],
+            ['Ongoing support', projectDetails.maintenancePlan],
+        ];
+        return <div className="flex flex-col xl:flex-row h-screen DashboardBackgroundGradient overflow-hidden">
+            <DashboardClientSideNav highlight="projects" />
+            <div className="flex-1 flex flex-col pt-[60px] xl:pt-0 min-h-0 overflow-hidden">
+                <DashboardTopBar title="Project Details" />
+                <main className="flex-1 overflow-y-auto px-5 sm:px-[50px] py-[30px]">
+                    <Link href="/dashboard/projects" className="text-[13px] underline">Back to projects</Link>
+                    <section className="BlackGradient ContentCardShadow rounded-[20px] p-7 mt-5 max-w-[850px]">
+                        <h1 className="text-[24px] font-semibold">{projectName}</h1>
+                        <p className="mt-3 font-medium">{projectStateLabels[state]}</p>
+                        <p className="text-[14px] opacity-70 mt-2">{projectNextStep({ ...projectDetails, uid: projectId, projectName: projectName || 'Project' })}</p>
+                        <div className="flex flex-wrap gap-4 mt-5">
+                            {state === 'setup' && <Link className="PopupAttentionGradient rounded-xl px-4 py-2" href={`/dashboard/projects/${projectId}/setup`}>Continue setup</Link>}
+                            <Link className="underline py-2" href={`/dashboard/messages?projectId=${encodeURIComponent(projectId)}`}>Ask the team about this project</Link>
+                        </div>
+                        <h2 className="text-[18px] font-semibold mt-8">{state === 'setup' ? 'Your draft brief' : 'Your submitted brief'}</h2>
+                        {projectDescription && <p className="whitespace-pre-wrap break-words text-[14px] opacity-70 mt-3">{projectDescription}</p>}
+                        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-6">
+                            {brief.map(([label, value]) => <div key={label}><dt className="text-[12px] opacity-60">{label}</dt><dd className="text-[14px] mt-1 break-words">{value || 'Not specified'}</dd></div>)}
+                        </dl>
+                    </section>
+                </main>
+            </div>
+        </div>;
+    }
 
     // Payment math
     const safeWeeksPaid = weeksPaid || 0;
@@ -188,6 +222,7 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
                         </div>
                     </div>
 
+                    <Link className="inline-block underline text-[13px] mb-5" href={`/dashboard/messages?projectId=${encodeURIComponent(projectId)}`}>Ask the team about this project</Link>
                     {/* Main Grid */}
                     <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-[20px]">
 

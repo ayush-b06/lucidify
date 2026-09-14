@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { deleteDoc, doc } from 'firebase/firestore';
+import { useClientProjects } from '@/hooks/useClientProjects';
+import { projectState, projectProgress, projectHref, projectNextStep, projectStateLabels, ProjectState } from '@/utils/projectWorkflow';
 import { db } from '../firebaseConfig';
 import { useAuth } from '@/context/authContext';
 import DashboardClientSideNav from './DashboardClientSideNav';
@@ -11,21 +12,6 @@ import Link from 'next/link';
 import CreateProjectPopup from './CreateProjectPopup';
 import DashboardTopBar from './DashboardTopBar';
 import { useTheme } from '@/context/themeContext';
-
-interface Project {
-    uid: string;
-    projectName: string;
-    logoAttachment: string | null;
-    logoUrl?: string | null;
-    progress?: string;
-    recentActivity?: string;
-    dateCreated?: string;
-    approval?: string;
-    dueDate?: string;
-    status?: number;
-    setupComplete?: boolean;
-    projectDescription?: string;
-}
 
 const STATUS_CONFIG: Record<number, { color: string; bg: string; border: string; label: string }> = {
     1: { color: '#a89cff', bg: 'rgba(114,92,247,0.12)', border: 'rgba(114,92,247,0.25)', label: 'Planning' },
@@ -37,68 +23,37 @@ const STATUS_CONFIG: Record<number, { color: string; bg: string; border: string;
 
 const formatDate = (iso?: string) => {
     if (!iso || iso === 'N/A') return null;
-    try {
-        return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    } catch { return iso; }
+    const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00` : iso);
+    return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 const DASHBOARDClientProjects = () => {
     const { theme } = useTheme();
     const isDark = theme === 'dark';
 
-    const [projects, setProjects] = useState<Project[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { projects, loading, error, retry } = useClientProjects();
+    const [search, setSearch] = useState('');
+    const [filter, setFilter] = useState<ProjectState | 'all'>('all');
+    const [actionError, setActionError] = useState('');
+    const visibleProjects = projects.filter(project =>
+        (filter === 'all' || projectState(project) === filter) &&
+        `${project.projectName} ${project.projectDescription || ''}`.toLowerCase().includes(search.trim().toLowerCase())
+    );
     const [isCreateProjectPopupOpen, setIsCreateProjectPopupOpen] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const toggleCreateProjectPopup = () => setIsCreateProjectPopupOpen(p => !p);
 
-    const { user, loading: authLoading } = useAuth();
-    const router = useRouter();
-
-    const fetchProjects = async () => {
-        if (!user) { router.push('/login'); return; }
-        try {
-            const snap = await getDocs(collection(db, 'users', user.uid, 'projects'));
-            const list: Project[] = [];
-            snap.forEach(d => {
-                const data = d.data() as Project;
-                list.push({
-                    uid: d.id,
-                    projectName: data.projectName || 'Unnamed Project',
-                    logoAttachment: data.logoAttachment || null,
-                    logoUrl: data.logoUrl || null,
-                    progress: data.progress || '0',
-                    recentActivity: data.recentActivity || null,
-                    dateCreated: data.dateCreated || null,
-                    approval: data.approval || 'pending',
-                    dueDate: data.dueDate || null,
-                    status: data.status || 1,
-                    setupComplete: data.setupComplete ?? false,
-                    projectDescription: data.projectDescription || '',
-                } as Project);
-            });
-            setProjects(list);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        if (!authLoading) fetchProjects();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [authLoading]);
+    const { user } = useAuth();
 
     const handleDeleteProject = async (uid: string) => {
         if (!user) return;
         if (!window.confirm('Are you sure you want to cancel this project?')) return;
         setDeletingId(uid);
+        setActionError('');
         try {
             await deleteDoc(doc(db, 'users', user.uid, 'projects', uid));
-            setProjects(prev => prev.filter(p => p.uid !== uid));
-        } catch { alert('Error cancelling project.'); }
+        } catch { setActionError('We couldn’t cancel the project. Please try again.'); }
         finally { setDeletingId(null); }
     };
 
@@ -114,7 +69,6 @@ const DASHBOARDClientProjects = () => {
             <CreateProjectPopup
                 closeCreatProjectPopup={toggleCreateProjectPopup}
                 isVisible={isCreateProjectPopupOpen}
-                onCreated={fetchProjects}
             />
 
             <DashboardClientSideNav highlight="projects" />
@@ -139,8 +93,18 @@ const DASHBOARDClientProjects = () => {
                         </button>
                     </div>
 
+                    <div className="flex flex-wrap gap-3 mb-5">
+                        <input aria-label="Search projects" placeholder="Search projects..." value={search} onChange={event => setSearch(event.target.value)} className="BlackWithLightGradient rounded-xl px-4 py-3 flex-1 min-w-0" />
+                        <select aria-label="Filter projects" value={filter} onChange={event => setFilter(event.target.value as ProjectState | 'all')} className="BlackWithLightGradient rounded-xl px-4 py-3">
+                            <option value="all">All projects ({projects.length})</option>
+                            {Object.entries(projectStateLabels).map(([state, label]) => <option key={state} value={state}>{label} ({projects.filter(project => projectState(project) === state).length})</option>)}
+                        </select>
+                    </div>
+                    {actionError && <p role="alert" className="mb-4">{actionError}</p>}
                     {/* States */}
-                    {loading ? (
+                    {error ? (
+                        <div role="alert" className="BlackGradient rounded-xl p-6"><p>{error}</p><button onClick={retry} className="underline mt-3">Try again</button></div>
+                    ) : loading ? (
                         <div className="flex flex-col gap-[12px]">
                             {[1, 2, 3].map(i => (
                                 <div key={i} className="h-[100px] rounded-[16px] animate-pulse"
@@ -163,19 +127,17 @@ const DASHBOARDClientProjects = () => {
                         </div>
                     ) : (
                         <div className="flex flex-col gap-[12px]">
-                            {projects.map((project) => {
-                                const statusCfg = STATUS_CONFIG[project.status ?? 1];
+                            {visibleProjects.length === 0 && <div className="BlackGradient rounded-xl p-6"><p>No projects match your search.</p><button className="underline mt-3" onClick={() => { setSearch(''); setFilter('all'); }}>Clear filters</button></div>}
+                            {visibleProjects.map((project) => {
+                                const statusCfg = STATUS_CONFIG[project.status ?? 1] || STATUS_CONFIG[1];
                                 const logoSrc = project.logoUrl || project.logoAttachment || '/Lucidify Umbrella.png';
-                                const progressNum = parseFloat(project.progress || '0');
-                                const isSetupIncomplete = !project.setupComplete;
-                                const isPending = project.setupComplete && project.approval?.toLowerCase() !== 'approved';
-                                const isApproved = project.setupComplete && project.approval?.toLowerCase() === 'approved';
+                                const progressNum = projectProgress(project.progress);
+                                const state = projectState(project);
+                                const isSetupIncomplete = state === 'setup';
+                                const isPending = state === 'pending';
+                                const isApproved = state === 'approved';
 
-                                const cardHref = isSetupIncomplete && user
-                                    ? `/dashboard/projects/${project.uid}/setup?userId=${user.uid}&projectId=${project.uid}`
-                                    : isApproved && user
-                                    ? `/dashboard/projects/${project.uid}?projectId=${project.uid}&userId=${user.uid}`
-                                    : null;
+                                const cardHref = isSetupIncomplete || isApproved ? projectHref(project) : null;
 
                                 const cardStyle = {
                                     background: cardBg,
@@ -220,6 +182,7 @@ const DASHBOARDClientProjects = () => {
                                                                 Pending approval
                                                             </span>
                                                         )}
+                                                        {state === 'declined' && <span className="text-[12px] text-red-400">Declined</span>}
                                                         {isApproved && (
                                                             <span className="flex items-center gap-[5px] px-[8px] py-[3px] rounded-[6px] text-[11px] font-medium flex-shrink-0"
                                                                 style={{ background: statusCfg.bg, color: statusCfg.color, border: `1px solid ${statusCfg.border}` }}>
@@ -280,6 +243,11 @@ const DASHBOARDClientProjects = () => {
                                                 </div>
                                             </div>
 
+                                            <p className="text-[13px] mt-3 opacity-70">{projectNextStep(project)}</p>
+                                            {(isPending || state === 'declined') && <div className="flex gap-4 mt-3 text-[13px]">
+                                                <Link className="underline" href={projectHref(project)}>View submitted brief</Link>
+                                                <Link className="underline" href={`/dashboard/messages?projectId=${encodeURIComponent(project.uid)}`}>Ask the team</Link>
+                                            </div>}
                                             {/* Mobile: progress bar */}
                                             {isApproved && (
                                                 <div className="sm:hidden mt-[14px] flex items-center gap-[10px]">

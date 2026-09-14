@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:e2e": "playwright test",
+    "test:emulators": "npx firebase-tools emulators:exec --project demo-lucidify --config tests/firebase.json --only auth,firestore \"npm run test:e2e\""
   },
   "dependencies": {
     "axios": "^1.7.9",
@@ -17,6 +19,7 @@
     "sass": "^1.79.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

@@ -9,7 +9,6 @@ import DashboardAdminSideNav from './DashboardAdminSideNav';
 import Image from 'next/image';
 import Link from 'next/link';
 import DashboardTopBar from './DashboardTopBar';
-import { useTheme } from '@/context/themeContext';
 
 interface Project {
   uid: string;
@@ -31,9 +30,6 @@ const AdminDashboard = () => {
   const [firstName, setFirstName] = useState<string | null>(null);
   const auth = getAuth();
   const router = useRouter();
-  const { setTheme } = useTheme();
-
-  useEffect(() => { setTheme('light'); }, []);
 
   const getFormattedDate = () => {
     const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
