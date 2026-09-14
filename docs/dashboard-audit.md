@@ -161,8 +161,20 @@ can replace the painted preview without touching component code.
 
 New project fields: `briefVersion: 3`, `categoryId`, `customCategory`, `stylePicks`, `pages`,
 `briefAssets` (a map of asset group to image URLs), and `assetLinks`. `additionalNotes` and
-`logoUrl` are reused. Production rules that restrict field names will need to allow these for
-project owners. Briefs at version 1 and 2 still render their original fields unchanged.
+`logoUrl` are reused. No rules change is needed: `firebase/firestore.rules` grants the project
+owner and the admin read/write across `projects/{projectId}/**` without enumerating fields.
+Briefs at version 1 and 2 still render their original fields unchanged.
+
+Older `projectDescription`, `audience`, `visitorGoal`, `visualDirection`, `inspiration`,
+`contentReadiness`, `contentLinks`, `mustHaves`, `timelinePreference`, and `estimatedBudget` values
+are never deleted — they stay on the documents that have them and keep appearing on those briefs.
+
+### Verification
+
+33 of 34 browser tests pass. `progress.spec.ts` "stage previews synchronize" is flaky and fails on
+unmodified `main` as well: it drives seven tabs across two browser contexts, and the admin tab
+intermittently loses its session and lands on the marketing page before the save. Production build
+and TypeScript checking pass; ESLint reports only the existing image-optimization advisories.
 
 ## Existing names and search correction
 
