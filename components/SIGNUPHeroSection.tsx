@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { GoogleAuthProvider, createUserWithEmailAndPassword, signInWithPopup, onAuthStateChanged } from "firebase/auth";
+import { GoogleAuthProvider, createUserWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { auth } from '../firebaseConfig';
 import Link from 'next/link';
 import { authErrorMessage } from '@/utils/authErrors';
@@ -19,10 +19,9 @@ const SIGNUPHeroSection = () => {
   const [step, setStep] = useState<number>(1);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => onAuthStateChanged(auth, user => {
-    if (user) router.replace("/dashboard");
-  }), [router]);
-
+  // Signing up never watches for an existing session. Someone who is already signed in — or who
+  // signed in on this device before — still gets the form, so they can create another account.
+  // Only logging in resumes a recent session. Each handler below navigates on its own success.
   useEffect(() => { setTheme('light'); }, [setTheme]);
 
   const handleGoogleSignUp = async () => {
@@ -31,9 +30,10 @@ const SIGNUPHeroSection = () => {
     setError(null);
     try {
       await signInWithPopup(auth, new GoogleAuthProvider());
+      // The dashboard guard sends a brand-new account on to /signup/get-started.
+      router.replace("/dashboard");
     } catch (error) {
       setError(authErrorMessage(error));
-    } finally {
       setSubmitting(false);
     }
   };
@@ -53,9 +53,9 @@ const SIGNUPHeroSection = () => {
     setSubmitting(true);
     try {
       await createUserWithEmailAndPassword(auth, email.trim(), password);
+      router.replace("/dashboard");
     } catch (error) {
       setError(authErrorMessage(error));
-    } finally {
       setSubmitting(false);
     }
   };

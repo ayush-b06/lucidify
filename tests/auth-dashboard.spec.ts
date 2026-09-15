@@ -111,6 +111,34 @@ test('completed account goes directly to dashboard', async ({ page }) => {
   expect(await page.locator('img[src*="%2Fnull"]').count()).toBe(0);
 });
 
+test('signing up ignores an existing session while logging in still resumes one', async ({ page }) => {
+  const email = uniqueEmail();
+  await seedUser(email, { firstName: 'Returning', setUp: true });
+  await login(page, email);
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  // Signup shows its form to a signed-in visitor instead of bouncing them to the dashboard.
+  await page.goto('/signup');
+  await expect(page).toHaveURL(/\/signup$/);
+  await expect(page.getByRole('heading', { name: 'Create an Account' })).toBeVisible();
+  await page.waitForTimeout(1500);
+  await expect(page).toHaveURL(/\/signup$/);
+
+  // Logging in still picks the session back up without asking again.
+  await page.goto('/login');
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  // And a signed-in visitor can still create a second account from the signup form.
+  const second = uniqueEmail();
+  await page.goto('/signup');
+  await page.getByPlaceholder('Email address').fill(second);
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByPlaceholder('Password (min. 8 characters)').nth(0).fill(password);
+  await page.getByPlaceholder('Password (min. 8 characters)').nth(1).fill(password);
+  await page.getByRole('button', { name: 'Complete Sign Up' }).click();
+  await expect(page).toHaveURL(/\/signup\/get-started$/);
+});
+
 test('invalid credentials and existing email show useful errors; back does not submit', async ({ page }) => {
   const email = uniqueEmail();
   await seedUser(email);
