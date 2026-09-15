@@ -266,29 +266,67 @@ test('direct conversations appear live for both participants and reopen without 
  await context.close();
 });
 
-test('design uploads report remote failures, fit on mobile, and save the design with its notification', async ({page}) => {
+const png = {name:'homepage-concept.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')};
+
+test('adding files names them before upload, reports failures, fits on mobile, and notifies the client', async ({page}) => {
  const client=await user(); await user(adminEmail,'Ayush'); const id=unique();
  await put(`users/${client.uid}/projects/${id}`,{projectName:'Garden Studio',setupComplete:true,approval:'Approved',status:2});
  await login(page,adminEmail); await page.goto(`/dashboard/projects/${id}/uploads?userId=${client.uid}`); await page.setViewportSize({width:390,height:844});
- await page.getByRole('button',{name:/Upload|New Design|Add Design/i}).click();
- const modal=page.getByRole('dialog',{name:'Create a web design'});
+ await page.getByRole('button',{name:'Add files',exact:true}).click();
+ const modal=page.getByRole('dialog',{name:'Add files'});
  await expect(modal).toBeVisible();
  const bounds=await modal.boundingBox(); expect(bounds!.x).toBeGreaterThanOrEqual(0); expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(390);
  expect(await modal.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ await modal.getByLabel('Files to upload').setInputFiles(png);
+ // The chosen file is named on screen before anything is sent; the old form never showed this.
+ await expect(modal.getByText('homepage-concept.png',{exact:true})).toBeVisible();
  await page.route('https://api.cloudinary.com/**',route=>route.fulfill({status:500,body:'Upload failed'}));
- const file={name:'preview.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')};
- await modal.getByLabel('Design image').setInputFiles(file);
- await expect(modal.getByRole('alert')).toContainText('upload failed');
+ await modal.getByRole('button',{name:/^Add 1 file/}).click();
+ await expect(modal.getByRole('alert')).toContainText('could not be saved');
+ await expect(modal.getByText('homepage-concept.png',{exact:true})).toBeVisible();
+ expect(await list(`users/${client.uid}/projects/${id}/uploads`)).toHaveLength(0);
  await page.unroute('https://api.cloudinary.com/**');
  await page.route('https://api.cloudinary.com/**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({secure_url:'https://res.cloudinary.com/demo/image/upload/sample.jpg'})}));
- await modal.getByLabel('Design image').setInputFiles(file);
- await modal.getByLabel('Design name').fill('Homepage concept'); await modal.getByLabel('Design description').fill('A welcoming homepage for Garden Studio.');
- await modal.getByRole('button',{name:'Sections',exact:true}).click(); await modal.getByRole('button',{name:'Homepage',exact:true}).click();
- await page.screenshot({path:'artifacts/design-dialog-mobile.png',animations:'disabled'});
- await modal.getByRole('button',{name:'Create Web Design',exact:true}).click();
+ await modal.getByRole('button',{name:'Design',exact:true}).click();
+ await modal.locator('#resource-note').fill('Let me know what you think.');
+ await page.screenshot({path:'artifacts/upload-dialog-mobile.png',animations:'disabled'});
+ await modal.getByRole('button',{name:/^Add 1 file/}).click();
  await expect(modal).toHaveCount(0);
- expect(await list(`users/${client.uid}/projects/${id}/section web designs`)).toHaveLength(1);
+ const saved=await list(`users/${client.uid}/projects/${id}/uploads`);
+ expect(saved).toHaveLength(1);
+ expect(saved[0].fields.fileName.stringValue).toBe('homepage-concept.png');
+ expect(saved[0].fields.kind.stringValue).toBe('design');
+ expect(saved[0].fields.title.stringValue).toBe('homepage concept');
  expect((await list(`users/${client.uid}/notifications`)).filter((d:any)=>d.fields.type.stringValue==='upload')).toHaveLength(1);
+ await expect(page.getByText('homepage-concept.png',{exact:true})).toBeVisible();
+});
+
+test('one list merges old designs, brief photos and new uploads; the client likes and removes with confirmation', async ({page}) => {
+ const client=await user(); await user(adminEmail,'Ayush'); const id=unique();
+ await put(`users/${client.uid}/projects/${id}`,{projectName:'Garden Studio',setupComplete:true,approval:'Approved',status:2,briefAssets:{food:['https://res.cloudinary.com/demo/image/upload/food.jpg']}});
+ await put(`users/${client.uid}/projects/${id}/section web designs/legacy1`,{designName:'Old homepage',designDescription:'Saved by the old form',designURL:'https://res.cloudinary.com/demo/image/upload/old.jpg',designPage:'Sections',designType:'Homepage',dateCreated:'2026-09-01T00:00:00.000Z'});
+ await put(`users/${client.uid}/projects/${id}/uploads/mine`,{url:'https://res.cloudinary.com/demo/image/upload/mine.jpg',fileName:'my-photo.jpg',title:'My photo',note:'',kind:'photo',uploadedAt:'2026-09-10T00:00:00.000Z',uploadedByRole:'client',liked:false});
+ await login(page,client.email); await page.goto(`/dashboard/projects/${id}/uploads`);
+ // Every source in one grid, with no Sections / Full-Page split left.
+ await expect(page.getByRole('button',{name:/^Expand /})).toHaveCount(3);
+ await expect(page.getByRole('button',{name:'Sections',exact:true})).toHaveCount(0);
+ await expect(page.getByText('my-photo.jpg',{exact:true})).toBeVisible();
+ // Liking a design tells the team.
+ await page.getByRole('button',{name:'♡ I like this one'}).click();
+ await expect(page.getByRole('button',{name:'♥ You like this'})).toBeVisible();
+ await expect.poll(async()=>(await get(`users/${client.uid}/projects/${id}/section web designs/legacy1`)).selectedDesign.booleanValue).toBe(true);
+ expect(await list(`users/${client.uid}/adminNotifications`)).toHaveLength(1);
+ // Lucidify's design is not the client's to delete; their own upload is.
+ await expect(page.getByRole('button',{name:'Remove Old homepage'})).toHaveCount(0);
+ await page.getByRole('button',{name:'Remove My photo'}).click();
+ const confirm=page.getByRole('alertdialog',{name:'Remove file'});
+ await expect(confirm).toContainText('still open it');
+ await confirm.getByRole('button',{name:'Keep it'}).click();
+ await expect(page.getByRole('button',{name:/^Expand /})).toHaveCount(3);
+ await page.getByRole('button',{name:'Remove My photo'}).click();
+ await page.getByRole('alertdialog',{name:'Remove file'}).getByRole('button',{name:'Remove',exact:true}).click();
+ await expect(page.getByRole('button',{name:/^Expand /})).toHaveCount(2);
+ expect(await list(`users/${client.uid}/projects/${id}/uploads`)).toHaveLength(0);
 });
 
 test('unknown project data cannot break totals or cards, and negative billing amounts are rejected', async ({page}) => {

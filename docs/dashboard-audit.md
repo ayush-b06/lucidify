@@ -176,6 +176,52 @@ unmodified `main` as well: it drives seven tabs across two browser contexts, and
 intermittently loses its session and lands on the marketing page before the save. Production build
 and TypeScript checking pass; ESLint reports only the existing image-optimization advisories.
 
+## One file list, shared uploading, and design feedback
+
+Uploads no longer splits designs into Sections and Full-Page. One grid shows every visual
+resource on a project, newest first, merged live from three places by `utils/projectUploads.ts`:
+
+- `projects/{id}/uploads` — the new collection both the client and the team write to.
+- `section web designs` and `full-page web designs` — designs saved by the old form. Nothing was
+  migrated; they are read in place and their Sections/Homepage values become tags.
+- The project brief's `briefAssets` and `logoUrl`, so a photo the client attached during setup
+  does not have to be hunted for on a second page.
+
+Each file carries a kind — Design, Logo, Photo, or Other — shown as a tag, with filter chips above
+the grid once more than one kind is present.
+
+### Uploading
+
+The old `CreateWebDesignPopup` is replaced by `UploadResourceDialog`, shared by both roles. It
+required five answers (name, description, Sections/Full-Page, one of nineteen "design types", and
+the image) before a single picture could be saved, never displayed the chosen file's name, and
+imported Firebase Storage without using it.
+
+The new dialog needs only a file. It accepts several at once, lists each one by **name and size**
+before anything is sent, uploads them in order with visible progress, and keeps the selection when
+an upload fails so a retry never re-picks files. Kind defaults sensibly per role; name and note are
+optional, and an omitted name falls back to the filename.
+
+Clients can now add files themselves — photos, logos, references. Uploads notify the other party:
+the team's uploads alert the client, the client's alert the team.
+
+### Removing and expanding
+
+Any file can be opened full-screen, with arrow keys and a counter to move through the current
+filter. Removing asks for confirmation first. The confirmation is explicit that an unsigned
+Cloudinary preset returns no deletion token, so the stored file itself cannot be destroyed from the
+dashboard and anyone holding its link keeps access; removing a brief photo also says that it leaves
+the brief. Clients may remove what they added; the team may remove anything.
+
+### Design feedback
+
+Clients can mark a design "I like this one", which sets the previously unused `selectedDesign` flag
+on old designs (`liked` on new ones) and alerts the team. The admin header counts how many are
+liked. This closes the one loop the page was missing — design feedback previously had to happen
+over text or email.
+
+Both project overviews count the new `uploads` collection alongside the legacy ones.
+
 ## Existing names and search correction
 
 The admin project list now displays whichever name fields are present instead of requiring both a first and last name. The composer’s persistent file-limit/keyboard-shortcut helper line is removed from both chat views; attachment validation remains.

@@ -63,7 +63,7 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
 
     useEffect(() => {
         let active = true;
-        Promise.all(['section web designs', 'full-page web designs'].map(name => getDocs(collection(db, 'users', userId, 'projects', projectId, name))))
+        Promise.all(['section web designs', 'full-page web designs', 'uploads'].map(name => getDocs(collection(db, 'users', userId, 'projects', projectId, name))))
             .then(results => { if (active) setDesignCount(results.reduce((total, snapshot) => total + snapshot.size, 0)); })
             .catch(() => { if (active) setDesignCount(0); });
         return () => { active = false; };
