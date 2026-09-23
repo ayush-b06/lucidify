@@ -8,7 +8,7 @@ import { useTheme } from '@/context/themeContext';
 import { queueAdminNotification, queueNotification } from '@/utils/notifications';
 import {
     MAX_FILES_PER_UPLOAD, MAX_UPLOAD_BYTES, UPLOAD_KINDS, UploadKind,
-    titleFromFileName, uploadResourceFile,
+    titleFromFileName, uploadResourceFile, ResourceUploadError,
 } from '@/utils/projectUploads';
 
 interface UploadResourceDialogProps {
@@ -23,6 +23,7 @@ interface UploadResourceDialogProps {
 interface Staged {
     file: File;
     preview: string;
+    id: string;
 }
 
 const UploadResourceDialog = ({ isVisible, onClose, userId, projectId, projectName, isAdmin }: UploadResourceDialogProps) => {
@@ -38,10 +39,12 @@ const UploadResourceDialog = ({ isVisible, onClose, userId, projectId, projectNa
     const [error, setError] = useState('');
     const inFlight = useRef(false);
     const fileInput = useRef<HTMLInputElement>(null);
+    const uploadedFiles = useRef(new Map<File, string>());
 
     useEffect(() => {
         if (isVisible) return;
         setStaged([]); setTitle(''); setNote(''); setError(''); setDone(0);
+        uploadedFiles.current.clear();
         setKind(isAdmin ? 'design' : 'photo');
     }, [isVisible, isAdmin]);
 
@@ -56,11 +59,12 @@ const UploadResourceDialog = ({ isVisible, onClose, userId, projectId, projectNa
         if (tooBig) { setError(`“${tooBig.name}” is over 10 MB. Try a smaller version.`); return; }
         if (staged.length + chosen.length > MAX_FILES_PER_UPLOAD) { setError(`Up to ${MAX_FILES_PER_UPLOAD} files at a time.`); return; }
         setError('');
-        setStaged(current => [...current, ...chosen.map(file => ({ file, preview: URL.createObjectURL(file) }))]);
+        setStaged(current => [...current, ...chosen.map(file => ({ file, preview: URL.createObjectURL(file), id: doc(collection(db, 'users', userId, 'projects', projectId, 'uploads')).id }))]);
     };
 
     const removeStaged = (index: number) => setStaged(current => {
         URL.revokeObjectURL(current[index].preview);
+        uploadedFiles.current.delete(current[index].file);
         return current.filter((_, i) => i !== index);
     });
 
@@ -70,16 +74,18 @@ const UploadResourceDialog = ({ isVisible, onClose, userId, projectId, projectNa
         inFlight.current = true; setBusy(true); setError(''); setDone(0);
         try {
             const folder = `users/${userId}/projects/${projectId}/uploads`;
-            const uploaded: { url: string; file: File }[] = [];
+            const uploaded: { url: string; file: File; id: string }[] = [];
             for (const entry of staged) {
-                uploaded.push({ url: await uploadResourceFile(entry.file, folder), file: entry.file });
+                const url = uploadedFiles.current.get(entry.file) || await uploadResourceFile(entry.file, folder);
+                uploadedFiles.current.set(entry.file, url);
+                uploaded.push({ url, file: entry.file, id: entry.id });
                 setDone(count => count + 1);
             }
 
             const batch = writeBatch(db);
             const uploadedAt = new Date().toISOString();
             for (const entry of uploaded) {
-                batch.set(doc(collection(db, 'users', userId, 'projects', projectId, 'uploads')), {
+                batch.set(doc(db, 'users', userId, 'projects', projectId, 'uploads', entry.id), {
                     url: entry.url,
                     fileName: entry.file.name,
                     title: (uploaded.length === 1 && title.trim()) || titleFromFileName(entry.file.name),
@@ -102,8 +108,14 @@ const UploadResourceDialog = ({ isVisible, onClose, userId, projectId, projectNa
             }
             await batch.commit();
             onClose();
-        } catch {
-            setError('Those files could not be saved. Nothing was lost — please try again.');
+        } catch (failure) {
+            if (failure instanceof ResourceUploadError) setError(`${failure.message} Your selected files are still here.`);
+            else {
+                const code = failure && typeof failure === 'object' && 'code' in failure ? String(failure.code) : '';
+                setError(code === 'permission-denied'
+                    ? 'The photos uploaded, but your account was denied permission to save them to this project. Your files are still selected. Retry, or ask the project owner to check your access.'
+                    : `The photos uploaded, but could not be saved to this project${code ? ` (${code})` : ''}. Your files are still selected. Retry to finish saving them.`);
+            }
         } finally { inFlight.current = false; setBusy(false); }
     };
 

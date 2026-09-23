@@ -166,13 +166,21 @@ export const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/dldxkfbz4/image/u
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const MAX_FILES_PER_UPLOAD = 10;
 
+export class ResourceUploadError extends Error {}
+
 export async function uploadResourceFile(file: File, folder: string) {
     const form = new FormData();
     form.append('file', file);
     form.append('upload_preset', UPLOAD_PRESET);
     form.append('folder', folder);
-    const response = await fetch(CLOUDINARY_URL, { method: 'POST', body: form });
+    let response: Response;
+    try { response = await fetch(CLOUDINARY_URL, { method: 'POST', body: form }); }
+    catch { throw new ResourceUploadError(`“${file.name}” could not reach the image service. Check your connection and retry.`); }
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || typeof data.secure_url !== 'string' || !data.secure_url.startsWith('https://')) throw new Error('Upload failed');
+    if (!response.ok) {
+        const reason = typeof data.error?.message === 'string' ? data.error.message.slice(0, 300) : `The image service returned error ${response.status}. Please retry.`;
+        throw new ResourceUploadError(`“${file.name}” could not be uploaded: ${reason}`);
+    }
+    if (typeof data.secure_url !== 'string' || !data.secure_url.startsWith('https://')) throw new ResourceUploadError(`The image service did not return a file link for “${file.name}”. Please retry.`);
     return data.secure_url as string;
 }

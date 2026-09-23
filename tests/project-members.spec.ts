@@ -150,10 +150,19 @@ test('clients and admin share one live project, search names with email display,
         await expect(page.getByRole('form', { name: 'Edit project details' }).getByRole('alert')).toContainText('Someone updated these details');
         await expect(page.getByLabel('Project name', { exact: true })).toHaveValue('Stale name');
         await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-        await partner.route('https://api.cloudinary.com/**', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ secure_url: 'https://res.cloudinary.com/dldxkfbz4/image/upload/shared-photo.png' }) }));
+        let uploadAttempts = 0;
+        await partner.route('https://api.cloudinary.com/**', route => {
+            uploadAttempts++;
+            return route.fulfill(uploadAttempts === 1
+                ? { status: 400, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Invalid image file' } }) }
+                : { contentType: 'application/json', body: JSON.stringify({ secure_url: 'https://res.cloudinary.com/dldxkfbz4/image/upload/shared-photo.png' }) });
+        });
         for (const target of [page, partner, admin]) await target.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Uploads' }).click();
         await partner.getByRole('button', { name: 'Add files', exact: true }).click();
         await partner.getByLabel('Files to upload').setInputFiles({ name: 'Team photo.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') });
+        await partner.getByRole('button', { name: 'Add 1 file', exact: true }).click();
+        await expect(partner.getByRole('dialog', { name: 'Add files' }).getByRole('alert')).toContainText('Invalid image file');
+        await expect(partner.getByRole('dialog', { name: 'Add files' }).getByText('Team photo.png', { exact: true })).toBeVisible();
         await partner.getByRole('button', { name: 'Add 1 file', exact: true }).click();
         await expect(partner.getByRole('dialog', { name: 'Add files' })).toHaveCount(0);
         for (const target of [page, partner, admin]) await expect(target.getByText('Team photo', { exact: true }).first()).toBeVisible();

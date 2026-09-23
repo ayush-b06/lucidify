@@ -282,7 +282,7 @@ test('adding files names them before upload, reports failures, fits on mobile, a
  await expect(modal.getByText('homepage-concept.png',{exact:true})).toBeVisible();
  await page.route('https://api.cloudinary.com/**',route=>route.fulfill({status:500,body:'Upload failed'}));
  await modal.getByRole('button',{name:/^Add 1 file/}).click();
- await expect(modal.getByRole('alert')).toContainText('could not be saved');
+ await expect(modal.getByRole('alert')).toContainText('image service returned error 500');
  await expect(modal.getByText('homepage-concept.png',{exact:true})).toBeVisible();
  expect(await list(`users/${client.uid}/projects/${id}/uploads`)).toHaveLength(0);
  await page.unroute('https://api.cloudinary.com/**');
@@ -299,6 +299,30 @@ test('adding files names them before upload, reports failures, fits on mobile, a
  expect(saved[0].fields.title.stringValue).toBe('homepage concept');
  expect((await list(`users/${client.uid}/notifications`)).filter((d:any)=>d.fields.type.stringValue==='upload')).toHaveLength(1);
  await expect(page.getByText('homepage-concept.png',{exact:true})).toBeVisible();
+});
+
+test('retrying a failed project save reuses uploaded photos and reports database permission errors', async ({page}) => {
+ const client=await user(); const id=unique();
+ await put(`users/${client.uid}/projects/${id}`, {projectName:'Retry photos',setupComplete:true,approval:'Approved'});
+ await login(page,client.email); await page.goto(`/dashboard/projects/${id}/uploads`);
+ let uploads=0;
+ await page.route('https://api.cloudinary.com/**', route=>{
+  uploads++;
+  return route.fulfill({contentType:'application/json',body:JSON.stringify({secure_url:'https://res.cloudinary.com/demo/image/upload/retry.png'})});
+ });
+ await page.getByRole('button',{name:'Add files',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Add files'});
+ await dialog.getByLabel('Files to upload').setInputFiles(png);
+ await put(`users/${client.uid}`,{denyWrites:true});
+ await dialog.getByRole('button',{name:'Add 1 file',exact:true}).click();
+ await expect(dialog.getByRole('alert')).toContainText('denied permission to save');
+ expect(uploads).toBe(1);
+ expect(await list(`users/${client.uid}/projects/${id}/uploads`)).toHaveLength(0);
+ await put(`users/${client.uid}`,{denyWrites:false});
+ await dialog.getByRole('button',{name:'Add 1 file',exact:true}).click();
+ await expect(dialog).toHaveCount(0);
+ expect(uploads).toBe(1);
+ expect(await list(`users/${client.uid}/projects/${id}/uploads`)).toHaveLength(1);
 });
 
 test('one list merges old designs, brief photos and new uploads; the client likes and removes with confirmation', async ({page}) => {
