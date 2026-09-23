@@ -4,6 +4,14 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function admin() { return signedIn() && request.auth.token.email == 'ayush.bhujle@gmail.com'; }
     function owner(uid) { return signedIn() && request.auth.uid == uid; }
+    function projectAccess(uid, projectId) {
+      return admin() || owner(uid) || (signedIn() && exists(/databases/$(database)/documents/users/$(uid)/projects/$(projectId)/members/$(request.auth.uid)));
+    }
+    function validMembership(uid, projectId) {
+      return request.resource.data.keys().hasOnly(['ownerId', 'projectId', 'addedBy', 'addedAt'])
+        && request.resource.data.ownerId == uid && request.resource.data.projectId == projectId
+        && request.resource.data.addedBy == request.auth.uid && request.resource.data.addedAt == request.time;
+    }
     function participant(id) { return signedIn() && request.auth.uid in get(/databases/$(database)/documents/directMessages/$(id)).data.participants; }
     function validMessage() {
       return request.resource.data.keys().hasOnly(['text', 'attachments', 'sender', 'timestamp', 'isRead'])
@@ -17,7 +25,31 @@ service cloud.firestore {
       allow list: if admin();
       allow create, update: if owner(uid) || admin();
       allow delete: if admin();
-      match /projects/{projectId}/{document=**} { allow read, write: if owner(uid) || admin(); }
+      match /projects/{projectId} {
+        allow read: if projectAccess(uid, projectId);
+        allow create, delete: if owner(uid) || admin();
+        allow update: if projectAccess(uid, projectId);
+        match /members/{memberId} {
+          allow read: if projectAccess(uid, projectId);
+          allow create: if projectAccess(uid, projectId) && memberId != uid
+            && exists(/databases/$(database)/documents/users/$(uid)/projects/$(projectId))
+            && exists(/databases/$(database)/documents/userDirectory/$(memberId))
+            && validMembership(uid, projectId)
+            && getAfter(/databases/$(database)/documents/users/$(memberId)/sharedProjects/$(uid + '_' + projectId)).data == request.resource.data;
+        }
+        match /{resourceCollection}/{resourceId} {
+          allow read, write: if resourceCollection in ['uploads', 'section web designs', 'full-page web designs'] && projectAccess(uid, projectId);
+        }
+      }
+      match /sharedProjects/{id} {
+        allow read: if owner(uid) || admin();
+        allow create: if signedIn()
+          && id == request.resource.data.ownerId + '_' + request.resource.data.projectId
+          && uid != request.resource.data.ownerId
+          && projectAccess(request.resource.data.ownerId, request.resource.data.projectId)
+          && validMembership(request.resource.data.ownerId, request.resource.data.projectId)
+          && getAfter(/databases/$(database)/documents/users/$(request.resource.data.ownerId)/projects/$(request.resource.data.projectId)/members/$(uid)).data == request.resource.data;
+      }
       match /conversations/{conversationId} {
         allow read, create, update: if owner(uid) || admin();
         allow delete: if admin();
@@ -54,11 +86,12 @@ service cloud.firestore {
     match /userDirectory/{uid} {
       function validDirectory() {
         let profile = getAfter(/databases/$(database)/documents/users/$(uid)).data;
-        return request.resource.data.keys().hasOnly(['firstName', 'lastName', 'selectedAvatar', 'searchPrefixes'])
+        return request.resource.data.keys().hasOnly(['firstName', 'lastName', 'email', 'selectedAvatar', 'searchPrefixes'])
           && request.resource.data.firstName is string && request.resource.data.firstName.size() <= 80
           && request.resource.data.lastName is string && request.resource.data.lastName.size() <= 80
           && request.resource.data.firstName == profile.firstName
           && request.resource.data.lastName == profile.get('lastName', '')
+          && (!request.resource.data.keys().hasAny(['email']) || request.resource.data.email == profile.get('email', ''))
           && request.resource.data.selectedAvatar == profile.get('selectedAvatar', null)
           && request.resource.data.searchPrefixes is list && request.resource.data.searchPrefixes.size() <= 240;
       }

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { doc, getDoc, runTransaction, updateDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { queueAdminNotification } from '@/utils/notifications';
-import { db } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 import styles from './Onboarding.module.css';
 import StylePreview from './StylePreview';
 import {
@@ -46,6 +46,7 @@ async function uploadImage(file: File) {
 const asStringArray = (value: unknown) => Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 
 export default function ProjectSetup({ userId, projectId }: Props) {
+    const projectUrl = `/dashboard/projects/${projectId}${auth.currentUser?.uid === userId ? '' : `?userId=${userId}`}`;
     const router = useRouter();
     const [projectName, setProjectName] = useState('');
     const [step, setStep] = useState(0);
@@ -85,7 +86,7 @@ export default function ProjectSetup({ userId, projectId }: Props) {
             if (!active) return;
             if (!snapshot.exists()) throw new Error('Project not found');
             const data = snapshot.data();
-            if (data.setupComplete === true) { router.replace(`/dashboard/projects/${projectId}`); return; }
+            if (data.setupComplete === true) { router.replace(projectUrl); return; }
             setProjectName(data.projectName || 'Your website');
             setCategoryId(typeof data.categoryId === 'string' ? data.categoryId : '');
             setCustomCategory(typeof data.customCategory === 'string' ? data.customCategory : '');
@@ -100,7 +101,7 @@ export default function ProjectSetup({ userId, projectId }: Props) {
         }).catch(() => { if (active) { setLoadFailed(true); setError('Could not load this project. Please retry.'); } })
             .finally(() => { if (active) setLoading(false); });
         return () => { active = false; };
-    }, [userId, projectId, router, attempt]);
+    }, [userId, projectId, projectUrl, router, attempt]);
 
     useEffect(() => {
         const created: string[] = [];
@@ -201,7 +202,7 @@ export default function ProjectSetup({ userId, projectId }: Props) {
                     transaction.update(ref, { ...updates, setupComplete: true, approval: 'Pending' });
                     queueAdminNotification(transaction, 'New project request', `${projectName} is ready for review.`, `/dashboard/projects/${projectId}?userId=${userId}`, 'new_project', `project-${projectId}`);
                 });
-                router.push(`/dashboard/projects/${projectId}`);
+                router.push(projectUrl);
             } else {
                 await updateDoc(ref, updates);
                 if (action === 'exit') router.push('/dashboard/projects');

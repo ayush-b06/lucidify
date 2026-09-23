@@ -11,7 +11,7 @@ export default function ProjectPage() {
     const search = useSearchParams();
     if (!user) return null;
     const isAdmin = user.email === ADMIN_EMAIL;
-    const userId = isAdmin ? search.get('userId') : user.uid;
+    const userId = search.get('userId') || (isAdmin ? null : user.uid);
     if (!userId) return <main className="DashboardBackgroundGradient p-8"><p>Select a client project to open its details.</p><Link href="/dashboard/projects" className="underline">Back to projects</Link></main>;
     return <Client userId={userId} projectId={projectId} />;
 }

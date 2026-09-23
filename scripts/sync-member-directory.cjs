@@ -1,6 +1,7 @@
 // Run with an authenticated Firebase CLI on PATH, or --firebase-tools /path/to/firebase-tools.
 // Dry-run by default; --apply creates missing public name/avatar projections.
 // Add --repair-search to rebuild stale prefixes without changing saved names or avatars.
+// Add --repair-email to populate display emails on existing directory entries.
 const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
@@ -34,6 +35,7 @@ async function main() {
   let pageToken = '', eligible = 0, created = 0, existing = 0, repairable = 0, repaired = 0;
   const apply = process.argv.includes('--apply');
   const repairSearch = process.argv.includes('--repair-search');
+  const repairEmail = process.argv.includes('--repair-email');
   do {
     const query = new URLSearchParams({ pageSize: '100', ...(pageToken ? { pageToken } : {}) });
     const result = await client.get(`${root}/users?${query}`);
@@ -41,9 +43,9 @@ async function main() {
       const fields = document.fields || {};
       if (fields.setUp?.booleanValue !== true || fields.email?.stringValue === 'ayush.bhujle@gmail.com' || !fields.firstName?.stringValue) continue;
       const uid = document.name.split('/').pop();
-      const entry = directoryProfile({ firstName: fields.firstName.stringValue, lastName: fields.lastName?.stringValue || '', selectedAvatar: fields.selectedAvatar?.stringValue || null });
+      const entry = directoryProfile({ firstName: fields.firstName.stringValue, lastName: fields.lastName?.stringValue || '', selectedAvatar: fields.selectedAvatar?.stringValue || null, email: fields.email?.stringValue || '' });
       eligible++;
-      if (repairSearch) {
+      if (repairSearch || repairEmail) {
         const result = await client.post(`${root}:batchGet`, { documents: [`${root}/userDirectory/${uid}`] });
         const saved = result.body.find(item => item.found)?.found;
         if (saved) {
@@ -51,12 +53,15 @@ async function main() {
           const data = saved.fields;
           const expected = directoryProfile({ firstName: data.firstName?.stringValue || '', lastName: data.lastName?.stringValue || '' }).searchPrefixes;
           const current = (data.searchPrefixes?.arrayValue?.values || []).map(item => item.stringValue);
-          if (JSON.stringify(current) !== JSON.stringify(expected)) {
+          const changes = {};
+          if (repairSearch && JSON.stringify(current) !== JSON.stringify(expected)) changes.searchPrefixes = expected;
+          if (repairEmail && data.email?.stringValue !== entry.email) changes.email = entry.email;
+          if (Object.keys(changes).length) {
             repairable++;
             if (apply) {
               await client.post(`${root}:commit`, { writes: [{
-                update: { name: saved.name, fields: { searchPrefixes: value(expected) } },
-                updateMask: { fieldPaths: ['searchPrefixes'] },
+                update: { name: saved.name, fields: Object.fromEntries(Object.entries(changes).map(([key, v]) => [key, value(v)])) },
+                updateMask: { fieldPaths: Object.keys(changes) },
                 currentDocument: { updateTime: saved.updateTime },
               }] });
               repaired++;

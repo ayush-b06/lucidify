@@ -15,6 +15,7 @@ import { paymentCount, paidCount } from '@/utils/billing';
 
 interface Project {
   uid: string;
+  userId: string;
   projectName: string;
   progress?: string;
   approval?: string;
@@ -173,7 +174,7 @@ const DASHBOARDClientDashboard = () => {
                     )}
 
                     <Link
-                      href={`/dashboard/projects/${activeProject.uid}${activeProject.approval === 'Draft' ? '/setup' : ''}?projectId=${activeProject.uid}&userId=${userId}`}
+                      href={`/dashboard/projects/${activeProject.uid}${activeProject.approval === 'Draft' ? '/setup' : ''}?projectId=${activeProject.uid}&userId=${activeProject.userId}`}
                       className="PopupAttentionGradient PopupAttentionShadow text-[13px] font-medium px-[16px] py-[10px] rounded-[12px] text-center"
                     >
                       {activeProject.approval === 'Draft' ? 'Continue your brief' : isBuilding ? 'View Project Details →' : 'View your project'}
@@ -204,8 +205,8 @@ const DASHBOARDClientDashboard = () => {
                 ) : (
                   projects.map((project, i) => (
                     <Link
-                      key={project.uid}
-                      href={`/dashboard/projects/${project.uid}${project.approval === 'Draft' ? '/setup' : ''}?projectId=${project.uid}&userId=${userId}`}
+                      key={`${project.userId}/${project.uid}`}
+                      href={`/dashboard/projects/${project.uid}${project.approval === 'Draft' ? '/setup' : ''}?projectId=${project.uid}&userId=${project.userId}`}
                       className={`flex items-center gap-[14px] px-[28px] py-[16px] hover:bg-white/[0.03] ${i < projects.length - 1 ? 'border-b border-white/5' : ''}`}
                     >
                       <div className="w-[36px] h-[36px] rounded-[8px] BlackWithLightGradient ContentCardShadow flex items-center justify-center flex-shrink-0 overflow-hidden">

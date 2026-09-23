@@ -16,6 +16,7 @@ import { useTheme } from '@/context/themeContext';
 
 interface Project {
     uid: string;
+    userId: string;
     projectName: string;
     logoAttachment: string | null;
     logoUrl?: string | null;
@@ -71,13 +72,13 @@ const DASHBOARDClientProjects = () => {
         }, () => { setError('Could not load your projects. Please retry.'); setLoading(false); });
     }, [user, authLoading, attempt]);
 
-    const handleDeleteProject = async (uid: string) => {
+    const handleDeleteProject = async (uid: string, ownerId: string) => {
         if (!user) return;
         if (!window.confirm('Are you sure you want to cancel this project?')) return;
         setDeletingId(uid);
         try {
-            await updateDoc(doc(db, 'users', user.uid, 'projects', uid), { approval: 'Cancelled' });
-            setProjects(prev => prev.filter(p => p.uid !== uid));
+            await updateDoc(doc(db, 'users', ownerId, 'projects', uid), { approval: 'Cancelled' });
+            setProjects(prev => prev.filter(p => p.uid !== uid || p.userId !== ownerId));
         } catch { setError('Could not cancel this project. Please retry.'); }
         finally { setDeletingId(null); }
     };
@@ -155,9 +156,9 @@ const DASHBOARDClientProjects = () => {
                                 const isApproved = project.setupComplete && project.approval?.toLowerCase() === 'approved';
 
                                 const cardHref = isSetupIncomplete && user
-                                    ? `/dashboard/projects/${project.uid}/setup?userId=${user.uid}&projectId=${project.uid}`
+                                    ? `/dashboard/projects/${project.uid}/setup?userId=${project.userId}&projectId=${project.uid}`
                                     : user
-                                    ? `/dashboard/projects/${project.uid}?projectId=${project.uid}&userId=${user.uid}`
+                                    ? `/dashboard/projects/${project.uid}?projectId=${project.uid}&userId=${project.userId}`
                                     : null;
 
                                 const cardStyle = {
@@ -248,7 +249,7 @@ const DASHBOARDClientProjects = () => {
 
                                                     {isPending && (
                                                         <button
-                                                            onClick={e => { e.preventDefault(); e.stopPropagation(); handleDeleteProject(project.uid); }}
+                                                            onClick={e => { e.preventDefault(); e.stopPropagation(); handleDeleteProject(project.uid, project.userId); }}
                                                             disabled={deletingId === project.uid}
                                                             className="px-[14px] h-[34px] rounded-[10px] text-[12px] font-medium transition-all hover:opacity-80 disabled:opacity-40 flex-shrink-0"
                                                             style={{
@@ -277,7 +278,7 @@ const DASHBOARDClientProjects = () => {
                                             {isPending && (
                                                 <div className="sm:hidden mt-[12px]">
                                                     <button
-                                                        onClick={e => { e.preventDefault(); e.stopPropagation(); handleDeleteProject(project.uid); }}
+                                                        onClick={e => { e.preventDefault(); e.stopPropagation(); handleDeleteProject(project.uid, project.userId); }}
                                                         disabled={deletingId === project.uid}
                                                         className="px-[14px] h-[32px] rounded-[10px] text-[12px] font-medium"
                                                         style={{ background: 'rgba(241,63,94,0.10)', color: '#f87171', border: '1px solid rgba(241,63,94,0.25)' }}
@@ -292,7 +293,7 @@ const DASHBOARDClientProjects = () => {
 
                                 return cardHref ? (
                                     <Link
-                                        key={project.uid}
+                                        key={`${project.userId}/${project.uid}`}
                                         href={cardHref}
                                         className="block rounded-[16px] overflow-hidden transition-all duration-200 hover:opacity-90 active:scale-[0.995] cursor-pointer"
                                         style={cardStyle}
@@ -300,7 +301,7 @@ const DASHBOARDClientProjects = () => {
                                         {innerContent}
                                     </Link>
                                 ) : (
-                                    <div key={project.uid} className="rounded-[16px] overflow-hidden transition-all duration-200" style={cardStyle}>
+                                    <div key={`${project.userId}/${project.uid}`} className="rounded-[16px] overflow-hidden transition-all duration-200" style={cardStyle}>
                                         {innerContent}
                                     </div>
                                 );

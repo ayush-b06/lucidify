@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { collection, doc, writeBatch } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 import { useDialog } from '@/hooks/useDialog';
 import { useTheme } from '@/context/themeContext';
 import { queueAdminNotification, queueNotification } from '@/utils/notifications';
@@ -87,6 +87,7 @@ const UploadResourceDialog = ({ isVisible, onClose, userId, projectId, projectNa
                     kind,
                     uploadedAt,
                     uploadedByRole: isAdmin ? 'admin' : 'client',
+                    uploadedBy: auth.currentUser?.uid || '',
                     liked: false,
                 });
             }

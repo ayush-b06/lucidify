@@ -30,6 +30,7 @@ export interface ProjectResource {
     kind: UploadKind;
     uploadedAt: string;
     uploadedByRole: 'admin' | 'client' | '';
+    uploadedBy?: string;
     liked: boolean;
     origin: ResourceOrigin;
     tags: string[];
@@ -56,6 +57,7 @@ function fromUpload(docId: string, data: DocumentData): ProjectResource {
         kind: asKind(data.kind),
         uploadedAt: asText(data.uploadedAt),
         uploadedByRole: data.uploadedByRole === 'admin' ? 'admin' : 'client',
+        uploadedBy: asText(data.uploadedBy),
         liked: data.liked === true,
         origin: { type: 'upload', docId },
         tags: [],

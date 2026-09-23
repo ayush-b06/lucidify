@@ -2,14 +2,15 @@
 
 import { getTotalCost, getPaid, getRemaining, paymentCount, paidCount } from '@/utils/billing';
 import { useEffect, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
-import { auth, db } from '../firebaseConfig';
+import { subscribeUserProjects } from '@/utils/projectSubscriptions';
+import { auth } from '../firebaseConfig';
 import DashboardClientSideNav from './DashboardClientSideNav';
 import DashboardTopBar from './DashboardTopBar';
 import Link from 'next/link';
 
 interface Project {
     id: string;
+    userId: string;
     projectName: string;
     logoAttachment?: string | null;
     paymentPlan?: number;
@@ -50,10 +51,9 @@ const DASHBOARDClientTransactions = () => {
     useEffect(() => {
         const user = auth.currentUser;
         if (!user) return;
-        getDocs(collection(db, 'users', user.uid, 'projects'))
-            .then(snap => setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() } as Project))))
-            .catch(() => setError('Could not load payments. Please retry.'))
-            .finally(() => setLoading(false));
+        setLoading(true);
+        return subscribeUserProjects(user.uid, items => { setProjects(items.map(project => ({ ...project, id: project.uid }))); setLoading(false); },
+            () => { setError('Could not load payments. Please retry.'); setLoading(false); });
     }, [attempt]);
 
     const active = projects.filter(p => getTotalCost(p) > 0);
@@ -193,7 +193,7 @@ const DASHBOARDClientTransactions = () => {
                                                 </button>
 
                                                 <Link
-                                                    href={`/dashboard/projects/${p.id}?projectId=${p.id}&userId=${auth.currentUser?.uid}`}
+                                                    href={`/dashboard/projects/${p.id}?projectId=${p.id}&userId=${p.userId}`}
                                                     className="inline-flex items-center gap-[4px] mt-[12px] text-[11px] opacity-25 hover:opacity-55 font-light transition-opacity"
                                                 >
                                                     View project →

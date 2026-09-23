@@ -1,4 +1,4 @@
-export interface MemberName { firstName?: string; lastName?: string; selectedAvatar?: string | null; }
+export interface MemberName { firstName?: string; lastName?: string; selectedAvatar?: string | null; email?: string; }
 export const normalizeName = (value: string) => value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('en').trim().replace(/\s+/g, ' ');
 export function directoryProfile(profile: MemberName) {
     const firstName = (profile.firstName || '').slice(0, 80);
@@ -8,5 +8,5 @@ export function directoryProfile(profile: MemberName) {
     for (const term of [name, ...name.split(' ')]) {
         for (let length = 1; length <= Math.min(term.length, 80); length++) prefixes.add(term.slice(0, length));
     }
-    return { firstName, lastName, selectedAvatar: profile.selectedAvatar || null, searchPrefixes: [...prefixes] };
+    return { firstName, lastName, email: profile.email || '', selectedAvatar: profile.selectedAvatar || null, searchPrefixes: [...prefixes] };
 }

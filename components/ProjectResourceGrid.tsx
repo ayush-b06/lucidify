@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { doc, updateDoc, writeBatch } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 import { useDialog } from '@/hooks/useDialog';
 import { useTheme } from '@/context/themeContext';
 import { queueAdminNotification } from '@/utils/notifications';
@@ -93,7 +93,7 @@ const ProjectResourceGrid = ({ resources, userId, projectId, projectName, isAdmi
     const removalRef = useDialog<HTMLDivElement>(!!pendingRemoval, () => setPendingRemoval(null), removing);
     const current = expanded === null ? null : shown[expanded];
 
-    // The client may only remove what they added; Lucidify can tidy anything.
+    // Clients share control of client-provided files; Lucidify can tidy anything.
     const canRemove = (resource: ProjectResource) => isAdmin || resource.uploadedByRole === 'client';
     const canLike = (resource: ProjectResource) => !isAdmin && resource.kind === 'design' && resource.origin.type !== 'brief';
 
@@ -164,7 +164,7 @@ const ProjectResourceGrid = ({ resources, userId, projectId, projectName, isAdmi
                                 </div>
 
                                 <p className="text-[11px] mt-auto pt-[4px]" style={{ color: muted }}>
-                                    {resource.uploadedByRole === 'admin' ? 'Added by Lucidify' : 'Added by you'}
+                                    {resource.uploadedByRole === 'admin' ? 'Added by Lucidify' : resource.uploadedBy === auth.currentUser?.uid ? 'Added by you' : 'Added by a client'}
                                     {formatDate(resource.uploadedAt) && ` · ${formatDate(resource.uploadedAt)}`}
                                 </p>
 

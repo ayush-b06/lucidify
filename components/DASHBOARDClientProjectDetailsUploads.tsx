@@ -71,7 +71,7 @@ const DASHBOARDClientProjectDetailsUploads = ({ userId, projectId }: DASHBOARDCl
                     <DashboardTopBar title="Uploads" />
 
                     <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">
-                        <ProjectTabs projectId={projectId} active="uploads" />
+                        <ProjectTabs projectId={projectId} active="uploads" userId={userId} />
 
                         {filesError && <p role="alert" className="text-red-400 text-[13px] mb-[16px]">{filesError}</p>}
 

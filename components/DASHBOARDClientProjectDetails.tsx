@@ -1,10 +1,8 @@
 "use client";
 
 import { paymentCount, paidCount, getPaid, getTotalCost, getRemaining } from '@/utils/billing';
-import { useEffect, useState } from 'react';
-import { collection, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
 import { useLiveProject } from '@/hooks/useLiveProject';
+import { useProjectResourceCount } from '@/hooks/useProjectResourceCount';
 import Link from 'next/link';
 import ProjectBrief, { ProjectBriefData } from './ProjectBrief';
 import { projectSummary } from '@/utils/projectCategories';
@@ -12,6 +10,8 @@ import Image from 'next/image';
 import DashboardClientSideNav from './DashboardClientSideNav';
 import DashboardTopBar from './DashboardTopBar';
 import ProjectTabs from './ProjectTabs';
+import ProjectMembers from './ProjectMembers';
+import EditProjectDetails from './EditProjectDetails';
 import { useTheme } from '@/context/themeContext';
 
 interface DASHBOARDClientProjectDetailsProps {
@@ -58,16 +58,8 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
     const { theme } = useTheme();
     const isDark = theme === 'dark';
 
-    const { projectDetails, setProjectDetails, loading, error } = useLiveProject<ProjectDetails>(userId, projectId);
-    const [designCount, setDesignCount] = useState(0);
-
-    useEffect(() => {
-        let active = true;
-        Promise.all(['section web designs', 'full-page web designs', 'uploads'].map(name => getDocs(collection(db, 'users', userId, 'projects', projectId, name))))
-            .then(results => { if (active) setDesignCount(results.reduce((total, snapshot) => total + snapshot.size, 0)); })
-            .catch(() => { if (active) setDesignCount(0); });
-        return () => { active = false; };
-    }, [userId, projectId]);
+    const { projectDetails, loading, error } = useLiveProject<ProjectDetails>(userId, projectId);
+    const designCount = useProjectResourceCount(userId, projectId);
 
     const {
         projectName, dueDate, dateCreated, projectDescription,
@@ -136,7 +128,9 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
 
                 <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">
 
-                    <ProjectTabs projectId={projectId} active="overview" />
+                    <ProjectTabs projectId={projectId} active="overview" userId={userId} />
+                    <ProjectMembers userId={userId} projectId={projectId} />
+                    {projectDetails && <EditProjectDetails userId={userId} projectId={projectId} project={projectDetails} />}
 
                     {projectDetails && <ProjectBrief project={projectDetails} />}
                     {/* Main Grid */}
@@ -203,7 +197,7 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
 
                                 {/* Quick links */}
                                 <div className="flex gap-[10px]">
-                                    <Link href={`/dashboard/projects/${projectId}/progress`}
+                                    <Link href={`/dashboard/projects/${projectId}/progress?userId=${userId}`}
                                         className="flex-1 flex items-center justify-between px-[16px] py-[13px] rounded-[12px] transition-all hover:opacity-80 active:scale-[0.98]"
                                         style={{ background: subtleBg, border: subtleBorder }}>
                                         <div className="flex items-center gap-[8px]">
@@ -212,7 +206,7 @@ const DASHBOARDClientProjectDetails = ({ userId, projectId }: DASHBOARDClientPro
                                         </div>
                                         <span className="text-[12px]" style={{ color: mutedColor }}>→</span>
                                     </Link>
-                                    <Link href={`/dashboard/projects/${projectId}/uploads`}
+                                    <Link href={`/dashboard/projects/${projectId}/uploads?userId=${userId}`}
                                         className="flex-1 flex items-center justify-between px-[16px] py-[13px] rounded-[12px] transition-all hover:opacity-80 active:scale-[0.98]"
                                         style={{ background: subtleBg, border: subtleBorder }}>
                                         <div className="flex items-center gap-[8px]">

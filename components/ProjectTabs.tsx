@@ -15,7 +15,7 @@ export type ProjectTab = (typeof TABS)[number]['key'];
 interface ProjectTabsProps {
     projectId: string;
     active: ProjectTab;
-    /** Admin views own no project, so they carry the owner's id in the URL. Client views omit it. */
+    /** Carry the original owner's id for both admin and shared client views. */
     userId?: string;
 }
 

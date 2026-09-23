@@ -82,7 +82,7 @@ const DASHBOARDClientProjectDetailsProgress = ({ userId, projectId }: DASHBOARDC
 
                 {/* Scrollable Content */}
                 <div className="flex-1 overflow-y-auto px-[20px] sm:px-[50px] pt-[30px] pb-[40px]">
-                    <ProjectTabs projectId={projectId} active="progress" />
+                    <ProjectTabs projectId={projectId} active="progress" userId={userId} />
 
                     {/* Hero Progress Banner */}
                     <div className="BlackGradient ContentCardShadow rounded-[24px] px-[24px] sm:px-[35px] py-[28px] mb-[20px]">

@@ -314,7 +314,7 @@ test('one list merges old designs, brief photos and new uploads; the client like
  // Liking a design tells the team.
  await page.getByRole('button',{name:'♡ I like this one'}).click();
  await expect(page.getByRole('button',{name:'♥ You like this'})).toBeVisible();
- await expect.poll(async()=>(await get(`users/${client.uid}/projects/${id}/section web designs/legacy1`)).selectedDesign.booleanValue).toBe(true);
+ await expect.poll(async()=>(await get(`users/${client.uid}/projects/${id}/section web designs/legacy1`)).selectedDesign?.booleanValue).toBe(true);
  expect(await list(`users/${client.uid}/adminNotifications`)).toHaveLength(1);
  // Lucidify's design is not the client's to delete; their own upload is.
  await expect(page.getByRole('button',{name:'Remove Old homepage'})).toHaveCount(0);

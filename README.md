@@ -67,3 +67,6 @@ deletion requests, and mobile design uploads with simulated Cloudinary failures.
 See [the dashboard audit](docs/dashboard-audit.md) for the bug list, fixes, and
 service-configuration checks needed before publishing. Test builds use `.next-test`
 so they can run alongside the normal local preview.
+
+Shared project membership, name-based client search, and the required rules/email
+directory rollout are documented in [shared projects](docs/shared-projects.md).
