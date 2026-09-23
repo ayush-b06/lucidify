@@ -63,6 +63,44 @@ async function membership(ownerId: string, projectId: string, memberId: string, 
 test.beforeAll(async () => { await useRules('firebase/firestore.rules'); });
 test.afterAll(async () => { await useRules('tests/firestore.rules'); });
 
+for (const state of ['new', 'missing-email', 'stale-email'] as const) {
+    test(`account setup uses the signed-in email under production rules: ${state}`, async ({ page }) => {
+        const email = `${unique()}@example.test`;
+        const response = await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-lucidify', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password: 'Testing123!', returnSecureToken: true }),
+        });
+        const { localId: uid } = await response.json();
+        expect(uid).toBeTruthy();
+        if (state !== 'new') expect((await put(`users/${uid}`, {
+            firstName: 'Unfinished', lastName: 'Lee', setUp: false,
+            ...(state === 'stale-email' ? { email: 'old-email@example.test' } : {}),
+        })).ok).toBeTruthy();
+        await page.goto('/login');
+        await page.getByPlaceholder('Email address').fill(email);
+        await page.getByPlaceholder('Password (min. 6 characters)').fill('Testing123!');
+        await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+        await expect(page).toHaveURL(/\/signup\/get-started$/);
+        await page.getByRole('textbox', { name: 'What should we call you?' }).fill('Taylor');
+        await page.getByRole('img', { name: 'Avatar 1', exact: true }).click();
+        await page.getByRole('button', { name: 'Finish setup' }).click();
+        await expect(page).toHaveURL(/\/dashboard$/);
+        await expect(page.getByRole('heading', { name: 'Welcome back, Taylor!' })).toBeVisible();
+        const profile = (await (await get(`users/${uid}`)).json()).fields;
+        const directory = (await (await get(`userDirectory/${uid}`)).json()).fields;
+        expect(profile.setUp.booleanValue).toBe(true);
+        expect(profile.email.stringValue).toBe(email);
+        expect(directory.email.stringValue).toBe(email);
+        expect(directory.firstName.stringValue).toBe('Taylor');
+        expect(directory.selectedAvatar.stringValue).toBe('Avatar 1.png');
+        if (state !== 'new') expect(profile.lastName.stringValue).toBe('Lee');
+        const messages = await (await get(`users/${uid}/conversations/lucidify/messages`)).json();
+        expect(messages.documents).toHaveLength(1);
+        await page.reload();
+        await expect(page.getByRole('heading', { name: 'Welcome back, Taylor!' })).toBeVisible();
+    });
+}
+
 test('clients and admin share one live project, search names with email display, and collaborate on files', async ({ page, browser }) => {
     test.setTimeout(120000);
     const owner = await user(`Owner${Date.now()}`), member = await user(`Partner${Date.now()}`), third = await user(`Third${Date.now()}`), fourth = await user(`Fourth${Date.now()}`);

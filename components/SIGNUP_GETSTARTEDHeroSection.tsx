@@ -60,10 +60,11 @@ export default function AccountSetup() {
             const timestamp = serverTimestamp();
             const welcome = "Welcome to Lucidify! We're excited to help you get started with your project.";
             const batch = writeBatch(db);
-            batch.set(userRef, {
+            const profileUpdates = {
                 email: user.email || '', firstName: name.trim(), selectedAvatar, setUp: true,
                 createdAt: snapshot.data()?.createdAt ?? timestamp,
-            }, { merge: true });
+            };
+            batch.set(userRef, profileUpdates, { merge: true });
             batch.set(doc(userRef, 'conversations', 'lucidify'), {
                 title: 'Lucidify', isPinned: true, lastMessage: welcome,
                 lastMessageSender: 'Lucidify', timestamp, unreadCounts: { [user.uid]: 1, Lucidify: 0 },
@@ -71,7 +72,7 @@ export default function AccountSetup() {
             batch.set(doc(userRef, 'conversations', 'lucidify', 'messages', 'welcome'), {
                 text: welcome, sender: 'Lucidify', timestamp, isRead: false,
             });
-            if (user.email !== ADMIN_EMAIL) queueDirectoryProfile(batch, user.uid, { ...snapshot.data(), firstName: name.trim(), selectedAvatar });
+            if (user.email !== ADMIN_EMAIL) queueDirectoryProfile(batch, user.uid, { ...snapshot.data(), ...profileUpdates });
             await batch.commit();
             router.replace('/dashboard');
         } catch {
